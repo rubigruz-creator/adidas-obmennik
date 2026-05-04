@@ -1,0 +1,75 @@
+flutter clean
+flutter pub get
+flutter run
+
+
+https://90.156.171.36:8083/
+
+
+Подключение:
+root@90.156.171.36
+
+ssh root@90.156.171.36
+
+
+N%u2OKt5
+
+MariaDB
+Kaliningrad1972
+
+INSERT INTO items (title, price, description) VALUES ('Франция', 475000, 'Кристофер Робин');
+
+INSERT INTO items (title, price, description) VALUES ('ееИгроеетбукеее', 75000, 'еМеееощееный для иегр еи раееботы');
+
+
+nano /var/www/html/api.php
+
+
+MariaDB [avito_shop]> SELECT * FROM items;
+
+EXIT;
+
+mysql -u root
+
+USE avito_shop;
+
+
+
+Войдите в HestiaCP: https://90.156.171.36:8083
+
+
+
+
+certbot certonly --standalone -d gazonbaza.ru -d www.gazonbaza.ru --email krubik1971@gmail.com --agree-tos --no-eff-email
+
+krubik1971@gmail.com
+
+
+
+key
+
+46ec73aee6bae1312da8ff7dcbe76767
+
+INSERT INTO api_keys (api_key, app_name) VALUES ('46ec73aee6bae1312da8ff7dcbe76767', 'RealFlutterApp');
+
+
+/home/rubi/web/gazonbaza.ru/public_html/api.php
+
+
+
+
+
+
+{"status":"success","api_token":"56822754785afd8ba3f22d46888f839c27ed675de16dd083f4945c1261ab85c3","user":{"id":1,"nickname":"tester","full_name":"\u0422\u0435\u0441\u0442 \u0422\u0435\u0441\u0442\u043e\u0432\u0438\u0447","position":"\u0420\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u0447\u0438\u043a"},"expires_at":"2026-06-03 09:41:50"}
+
+
+
+
+
+
+echo "Hello Kusotschnitsa" > /tmp/test.txt
+
+curl -X POST https://gazonbaza.ru/upload.php \
+  -H "X-API-Token: 56822754785afd8ba3f22d46888f839c27ed675de16dd083f4945c1261ab85c3" \
+  -F "file=@/tmp/test.txt" \
+  -F "is_public=1"
