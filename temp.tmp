@@ -2,6 +2,9 @@ flutter clean
 flutter pub get
 flutter run
 
+flutter clean
+flutter pub get
+flutter build apk --release
 
 https://90.156.171.36:8083/
 
