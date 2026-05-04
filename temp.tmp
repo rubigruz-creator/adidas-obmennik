@@ -41,7 +41,7 @@ USE avito_shop;
 Войдите в HestiaCP: https://90.156.171.36:8083
 
 
-
+UPDATE users SET is_admin = 1 WHERE phone = '222222';
 
 certbot certonly --standalone -d gazonbaza.ru -d www.gazonbaza.ru --email krubik1971@gmail.com --agree-tos --no-eff-email
 

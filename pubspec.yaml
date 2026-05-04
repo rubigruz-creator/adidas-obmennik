@@ -16,6 +16,7 @@ dependencies:
   permission_handler: ^11.3.1
   path_provider: ^2.1.2
   open_file: ^3.3.2
+  shared_preferences: ^2.2.2    # ← для хранения токена
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
