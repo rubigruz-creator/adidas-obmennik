@@ -147,6 +147,64 @@ class _FilesScreenState extends State<FilesScreen> {
     }
   }
 
+
+  Future<void> _renameFile(dynamic file) async {
+    final ownerId = file['user_id'];
+    final canRename = _isAdmin || ownerId == _currentUserId;
+    
+    if (!canRename) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Нет прав на переименование')),
+      );
+      return;
+    }
+    
+    final controller = TextEditingController(text: file['original_name']);
+    
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Переименовать файл'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: 'Новое имя',
+            hintText: 'Введите новое имя файла',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: Text('Переименовать'),
+          ),
+        ],
+      ),
+    );
+    
+    if (newName != null && newName.isNotEmpty && newName != file['original_name']) {
+      final success = await ApiService.renameFile(_apiToken, file['id'], newName);
+      if (success) {
+        _loadFiles();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Файл переименован в "$newName"')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка переименования')),
+        );
+      }
+    }
+  }
+
+
+
+
+
   void _showFileMenu(dynamic file) {
     final ownerId = file['user_id'];
     final canDelete = _isAdmin || ownerId == _currentUserId;
@@ -173,6 +231,22 @@ class _FilesScreenState extends State<FilesScreen> {
               icon: Icon(Icons.download),
               label: Text('Скачать'),
             ),
+
+            SizedBox(height: 10),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                _renameFile(file);
+              },
+              icon: Icon(Icons.edit, color: Colors.blue),
+              label: Text('Переименовать'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade100),
+            ),
+
+
+
+
+
             if (canDelete) ...[
               SizedBox(height: 10),
               ElevatedButton.icon(

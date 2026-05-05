@@ -74,5 +74,6 @@ echo "Hello Kusotschnitsa" > /tmp/test.txt
 
 curl -X POST https://gazonbaza.ru/upload.php \
   -H "X-API-Token: 56822754785afd8ba3f22d46888f839c27ed675de16dd083f4945c1261ab85c3" \
+  
   -F "file=@/tmp/test.txt" \
   -F "is_public=1"

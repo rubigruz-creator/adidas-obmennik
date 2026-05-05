@@ -75,6 +75,29 @@ class ApiService {
     return false;
   }
 
+
+  // ПЕРЕИМЕНОВАНИЕ ФАЙЛА
+  static Future<bool> renameFile(String token, int fileId, String newName) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/rename.php'),
+      headers: {
+        'X-API-Token': token,
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'id': fileId,
+        'new_name': newName,
+      }),
+    );
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['status'] == 'success';
+    }
+    return false;
+  }
+
+
+
   // НОВЫЙ МЕТОД - УДАЛЕНИЕ ФАЙЛА
   static Future<bool> deleteFile(String token, int fileId) async {
     final response = await http.post(
