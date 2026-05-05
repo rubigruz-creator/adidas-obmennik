@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import 'files_screen.dart';
@@ -10,64 +9,73 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _phoneController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _isLoading = false;
-  bool _isRegistering = false;
+  final _formKey = GlobalKey<FormState>();
+  bool _isLogin = true;
+  String _phone = '';
+  String _password = '';
+  String _nickname = '';
+  String _fullName = '';
+  String _position = '';
 
-  void _showMessage(String message, {bool isError = true}) {
+  bool _isLoading = false;
+
+  void _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    _formKey.currentState!.save();
+
+    setState(() => _isLoading = true);
+
+    try {
+      dynamic response;
+      if (_isLogin) {
+        response = await ApiService.login(_phone, _password);
+        if (response['status'] == 'success') {
+          await AuthService.saveToken(response['api_token']);
+          await AuthService.saveUserId(response['user']['id']);
+          await AuthService.saveUserNickname(response['user']['nickname']);
+          await AuthService.saveIsAdmin(response['user']['is_admin']);
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => FilesScreen()),
+          );
+        } else {
+          _showError('Ошибка входа');
+        }
+      } else {
+        response = await ApiService.register(
+          _phone,
+          _password,
+          _nickname,
+          _fullName,
+          _position,
+        );
+        if (response['status'] == 'success') {
+          setState(() {
+            _isLogin = true;
+            _password = '';
+            _nickname = '';
+            _fullName = '';
+            _position = '';
+          });
+          _showError('Регистрация успешна! Теперь войдите', isError: false);
+        } else {
+          _showError('Ошибка регистрации');
+        }
+      }
+    } catch (e) {
+      _showError('Ошибка: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  void _showError(String message, {bool isError = true}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: isError ? Colors.red : Colors.green,
       ),
     );
-  }
-
-  Future<void> _register() async {
-    setState(() => _isLoading = true);
-    try {
-      final data = await ApiService.register(_phoneController.text, _passwordController.text);
-      // ApiService.register возвращает Map<String, dynamic>
-      if (data['status'] == 'success') {
-        _showMessage('✅ Регистрация успешна! Теперь войдите', isError: false);
-        setState(() => _isRegistering = false);
-        _passwordController.clear();
-      } else {
-        _showMessage(data['message'] ?? 'Ошибка регистрации');
-      }
-    } catch (e) {
-      _showMessage('Ошибка: $e');
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _login() async {
-    setState(() => _isLoading = true);
-    try {
-      final data = await ApiService.login(_phoneController.text, _passwordController.text);
-      if (data['status'] == 'success') {
-        // Сохраняем данные пользователя
-        await AuthService.saveToken(data['api_token']);
-        await AuthService.saveUserNickname(data['user']['nickname']);
-        await AuthService.saveUserId(data['user']['id']);
-        await AuthService.saveIsAdmin(data['user']['is_admin'] ?? 0);
-        
-        _showMessage('✅ Добро пожаловать, ${data['user']['nickname']}!', isError: false);
-        
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => FilesScreen()),
-        );
-      } else {
-        _showMessage(data['message'] ?? 'Ошибка входа');
-      }
-    } catch (e) {
-      _showMessage('Ошибка: $e');
-    } finally {
-      setState(() => _isLoading = false);
-    }
   }
 
   @override
@@ -78,88 +86,105 @@ class _LoginScreenState extends State<LoginScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Colors.deepOrange.shade900, Colors.black],
+            colors: [Colors.orange.shade800, Colors.brown.shade700],
           ),
         ),
         child: Center(
           child: SingleChildScrollView(
             padding: EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.folder_special, size: 80, color: Colors.orange),
-                SizedBox(height: 20),
-                Text(
-                  '🍖 Кусочница',
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 40),
-                
-                TextField(
-                  controller: _phoneController,
-                  decoration: InputDecoration(
-                    labelText: 'Телефон (+71234567890)',
-                    prefixIcon: Icon(Icons.phone),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.white24,
-                  ),
-                  keyboardType: TextInputType.phone,
-                  style: TextStyle(color: Colors.white),
-                ),
-                SizedBox(height: 16),
-                
-                TextField(
-                  controller: _passwordController,
-                  decoration: InputDecoration(
-                    labelText: 'Пароль',
-                    prefixIcon: Icon(Icons.lock),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.white24,
-                  ),
-                  obscureText: true,
-                  style: TextStyle(color: Colors.white),
-                ),
-                SizedBox(height: 24),
-                
-                if (_isLoading)
-                  CircularProgressIndicator()
-                else if (_isRegistering)
-                  Column(
+            child: Card(
+              elevation: 8,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      ElevatedButton(
-                        onPressed: _register,
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: Size(double.infinity, 50),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text('ЗАРЕГИСТРИРОВАТЬСЯ'),
+                      Text(
+                        _isLogin ? '🍖 Вход' : '📝 Регистрация',
+                        style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                       ),
+                      SizedBox(height: 24),
+                      TextFormField(
+                        decoration: InputDecoration(
+                          labelText: 'Телефон',
+                          prefixIcon: Icon(Icons.phone),
+                          border: OutlineInputBorder(),
+                        ),
+                        onSaved: (val) => _phone = val!,
+                        validator: (val) => val!.isEmpty ? 'Введите телефон' : null,
+                      ),
+                      SizedBox(height: 16),
+                      TextFormField(
+                        decoration: InputDecoration(
+                          labelText: 'Пароль',
+                          prefixIcon: Icon(Icons.lock),
+                          border: OutlineInputBorder(),
+                        ),
+                        obscureText: true,
+                        onSaved: (val) => _password = val!,
+                        validator: (val) => val!.isEmpty ? 'Введите пароль' : null,
+                      ),
+                      if (!_isLogin) ...[
+                        SizedBox(height: 16),
+                        TextFormField(
+                          decoration: InputDecoration(
+                            labelText: 'Никнейм',
+                            prefixIcon: Icon(Icons.person),
+                            border: OutlineInputBorder(),
+                          ),
+                          onSaved: (val) => _nickname = val!,
+                          validator: (val) => val!.isEmpty ? 'Введите никнейм' : null,
+                        ),
+                        SizedBox(height: 16),
+                        TextFormField(
+                          decoration: InputDecoration(
+                            labelText: 'Полное имя',
+                            prefixIcon: Icon(Icons.badge),
+                            border: OutlineInputBorder(),
+                          ),
+                          onSaved: (val) => _fullName = val!,
+                        ),
+                        SizedBox(height: 16),
+                        TextFormField(
+                          decoration: InputDecoration(
+                            labelText: 'Должность',
+                            prefixIcon: Icon(Icons.work),
+                            border: OutlineInputBorder(),
+                          ),
+                          onSaved: (val) => _position = val!,
+                        ),
+                      ],
+                      SizedBox(height: 24),
+                      if (_isLoading)
+                        CircularProgressIndicator()
+                      else
+                        ElevatedButton(
+                          onPressed: _submit,
+                          style: ElevatedButton.styleFrom(
+                            minimumSize: Size(double.infinity, 50),
+                            backgroundColor: Colors.orange.shade800,
+                          ),
+                          child: Text(
+                            _isLogin ? 'Войти' : 'Зарегистрироваться',
+                            style: TextStyle(fontSize: 18),
+                          ),
+                        ),
+                      SizedBox(height: 16),
                       TextButton(
-                        onPressed: () => setState(() => _isRegistering = false),
-                        child: Text('Уже есть аккаунт? Войти'),
+                        onPressed: () => setState(() => _isLogin = !_isLogin),
+                        child: Text(
+                          _isLogin
+                              ? 'Нет аккаунта? Зарегистрироваться'
+                              : 'Уже есть аккаунт? Войти',
+                        ),
                       ),
                     ],
-                  )
-                else
-                  Column(
-                    children: [
-                      ElevatedButton(
-                        onPressed: _login,
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: Size(double.infinity, 50),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text('ВОЙТИ'),
-                      ),
-                      TextButton(
-                        onPressed: () => setState(() => _isRegistering = true),
-                        child: Text('Нет аккаунта? Зарегистрироваться'),
-                      ),
-                    ],
                   ),
-              ],
+                ),
+              ),
             ),
           ),
         ),

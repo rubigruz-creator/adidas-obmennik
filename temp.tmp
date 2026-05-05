@@ -111,3 +111,19 @@ curl -X POST https://gazonbaza.ru/toggle_visibility.php \
   # Поиск файлов по имени (замени ТОКЕН)
 curl -X GET "https://gazonbaza.ru/list_files.php?type=all&search=test" \
   -H "X-API-Token: ec6e7f76f4a4d503fd2230a50bf4701cbf1d7c4be15556c335d315b536caec94"
+
+
+
+
+
+
+
+
+  01e2999829ca65e60d6298a585f7be63af822e19ec2763407f017f7e850fd9c6
+
+
+curl -X POST https://gazonbaza.ru/upload.php \
+  -H "X-API-Token: 01e2999829ca65e60d6298a585f7be63af822e19ec2763407f017f7e850fd9c6" \
+  -F "file=@/tmp/test.txt" \
+  -F "is_public=1" \
+  -F "folder_id=123"

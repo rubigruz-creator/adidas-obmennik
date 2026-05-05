@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../widgets/file_pill.dart';
+import '../widgets/folder_pill.dart';
 import 'login_screen.dart';
 
 class FilesScreen extends StatefulWidget {
@@ -13,11 +14,15 @@ class FilesScreen extends StatefulWidget {
 }
 
 class _FilesScreenState extends State<FilesScreen> {
+  List<dynamic> _folders = [];
   List<dynamic> _files = [];
   bool _isLoading = true;
   String _apiToken = '';
   int _currentUserId = 0;
   bool _isAdmin = false;
+  int? _currentFolderId;
+  List<Map<String, dynamic>> _folderPath = [];
+
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   bool _isSearching = false;
@@ -44,20 +49,216 @@ class _FilesScreenState extends State<FilesScreen> {
       _isAdmin = isAdmin == 1;
     });
 
-    _loadFiles();
+    await _loadContent();
   }
 
-  Future<void> _loadFiles() async {
+  Future<void> _loadContent() async {
     setState(() => _isLoading = true);
     try {
-      final files = await ApiService.getFiles(_apiToken, search: _searchQuery);
-      setState(() => _files = files);
+      final content = await ApiService.getFolderContent(
+        _apiToken,
+        folderId: _currentFolderId,
+        search: _searchQuery,
+      );
+      setState(() {
+        _folders = content['folders'];
+        _files = content['files'];
+      });
+      if (_currentFolderId != null) {
+        await _loadFolderPath();
+      } else {
+        setState(() => _folderPath = []);
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка загрузки файлов')),
+        SnackBar(content: Text('Ошибка загрузки: $e')),
       );
     } finally {
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadFolderPath() async {
+    final allFolders = await ApiService.getFolders(_apiToken);
+    List<Map<String, dynamic>> path = [];
+    int? id = _currentFolderId;
+    while (id != null) {
+      final folder = allFolders.firstWhere((f) => f['id'] == id, orElse: () => null);
+      if (folder == null) break;
+      path.insert(0, {'id': folder['id'], 'name': folder['name']});
+      id = folder['parent_id'];
+    }
+    setState(() => _folderPath = path);
+  }
+
+  Future<void> _createFolder() async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Новая папка'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(labelText: 'Название папки'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: Text('Создать'),
+          ),
+        ],
+      ),
+    );
+    if (name != null && name.isNotEmpty) {
+      final folderId = await ApiService.createFolder(_apiToken, name, parentId: _currentFolderId);
+      if (folderId != null) {
+        _loadContent();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Папка "$name" создана')));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка создания папки')));
+      }
+    }
+  }
+
+  Future<void> _renameFolder(dynamic folder) async {
+    final controller = TextEditingController(text: folder['name']);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Переименовать папку'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(labelText: 'Новое имя'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: Text('Переименовать'),
+          ),
+        ],
+      ),
+    );
+    if (newName != null && newName.isNotEmpty && newName != folder['name']) {
+      final success = await ApiService.renameFolder(_apiToken, folder['id'], newName);
+      if (success) {
+        _loadContent();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Папка переименована')));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка')));
+      }
+    }
+  }
+
+  Future<void> _deleteFolder(dynamic folder) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Удалить папку "${folder['name']}"?'),
+        content: Text('Все файлы внутри будут перемещены в текущую папку. Дочерние папки удалятся. Продолжить?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Отмена')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Удалить', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      final success = await ApiService.deleteFolder(_apiToken, folder['id'], force: true);
+      if (success) {
+        _loadContent();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Папка удалена')));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка удаления')));
+      }
+    }
+  }
+
+  void _showFolderMenu(dynamic folder) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(folder['name'], style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                _renameFolder(folder);
+              },
+              icon: Icon(Icons.edit),
+              label: Text('Переименовать'),
+            ),
+            SizedBox(height: 10),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                _deleteFolder(folder);
+              },
+              icon: Icon(Icons.delete, color: Colors.red),
+              label: Text('Удалить', style: TextStyle(color: Colors.red)),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade50),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _moveFile(dynamic file) async {
+    final allFolders = await ApiService.getFolders(_apiToken);
+    final chosenFolderId = await showDialog<int?>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text('Переместить "${file['original_name']}" в папку'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, null),
+            child: Text('📁 Корень'),
+          ),
+          ...allFolders.map((folder) => SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, folder['id']),
+            child: Text('📁 ${folder['name']}'),
+          )),
+        ],
+      ),
+    );
+    if (chosenFolderId != null) {
+      final success = await ApiService.moveFile(_apiToken, file['id'], chosenFolderId == 0 ? null : chosenFolderId);
+      if (success) {
+        _loadContent();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Файл перемещён')));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка перемещения')));
+      }
+    }
+  }
+
+  Future<void> _uploadFile(File file, String fileName, bool isPublic) async {
+    final success = await ApiService.uploadFile(
+      _apiToken, 
+      file, 
+      fileName, 
+      isPublic: isPublic,
+      folderId: _currentFolderId
+    );
+    if (success) {
+      _loadContent();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('✅ $fileName загружен!')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('❌ Ошибка загрузки')),
+      );
     }
   }
 
@@ -79,20 +280,6 @@ class _FilesScreenState extends State<FilesScreen> {
         ],
       ),
     ) ?? false;
-  }
-
-  Future<void> _uploadFile(File file, String fileName, bool isPublic) async {
-    final success = await ApiService.uploadFile(_apiToken, file, fileName, isPublic: isPublic);
-    if (success) {
-      _loadFiles();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('✅ $fileName загружен!')),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ Ошибка загрузки')),
-      );
-    }
   }
 
   Future<void> _pickAnyFile() async {
@@ -162,7 +349,7 @@ class _FilesScreenState extends State<FilesScreen> {
     if (confirm == true) {
       final success = await ApiService.deleteFile(_apiToken, fileId);
       if (success) {
-        _loadFiles();
+        _loadContent();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('✅ Файл удалён')),
         );
@@ -215,7 +402,7 @@ class _FilesScreenState extends State<FilesScreen> {
     if (newName != null && newName.isNotEmpty && newName != file['original_name']) {
       final success = await ApiService.renameFile(_apiToken, file['id'], newName);
       if (success) {
-        _loadFiles();
+        _loadContent();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Файл переименован в "$newName"')),
         );
@@ -251,7 +438,7 @@ class _FilesScreenState extends State<FilesScreen> {
                 final success = await ApiService.toggleVisibility(_apiToken, file['id']);
                 if (success) {
                   Navigator.pop(context);
-                  _loadFiles();
+                  _loadContent();
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(isPublic ? '🔒 Стал личным' : '🌍 Стал общим')),
                   );
@@ -300,6 +487,16 @@ class _FilesScreenState extends State<FilesScreen> {
               label: Text('Переименовать'),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade100),
             ),
+            SizedBox(height: 10),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                _moveFile(file);
+              },
+              icon: Icon(Icons.drive_file_move, color: Colors.orange),
+              label: Text('Переместить в папку'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange.shade100),
+            ),
             if (canDelete) ...[
               SizedBox(height: 10),
               ElevatedButton.icon(
@@ -309,7 +506,7 @@ class _FilesScreenState extends State<FilesScreen> {
                 },
                 icon: Icon(Icons.delete, color: Colors.red),
                 label: Text('Удалить', style: TextStyle(color: Colors.red)),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade900),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade100),
               ),
             ],
           ],
@@ -339,10 +536,36 @@ class _FilesScreenState extends State<FilesScreen> {
                 ),
                 onChanged: (value) {
                   setState(() => _searchQuery = value);
-                  _loadFiles();
+                  _loadContent();
                 },
               )
-            : Text('🍖 Кусочница'),
+            : (_folderPath.isEmpty
+                ? Text('🍖 Кусочница')
+                : Row(
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.arrow_back),
+                        onPressed: () {
+                          setState(() {
+                            _currentFolderId = _folderPath.length > 1 
+                                ? _folderPath[_folderPath.length - 2]['id'] 
+                                : null;
+                          });
+                          _loadContent();
+                        },
+                      ),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: _folderPath.map((folder) => 
+                              Text(' / ${folder['name']}')
+                            ).toList(),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )),
         actions: [
           IconButton(
             icon: Icon(_isSearching ? Icons.close : Icons.search),
@@ -352,7 +575,7 @@ class _FilesScreenState extends State<FilesScreen> {
                   _isSearching = false;
                   _searchController.clear();
                   _searchQuery = '';
-                  _loadFiles();
+                  _loadContent();
                 } else {
                   _isSearching = true;
                   _searchQuery = '';
@@ -375,23 +598,43 @@ class _FilesScreenState extends State<FilesScreen> {
               ],
             ),
             IconButton(icon: Icon(Icons.logout), onPressed: _logout),
-            IconButton(icon: Icon(Icons.refresh), onPressed: _loadFiles),
+            IconButton(icon: Icon(Icons.refresh), onPressed: _loadContent),
           ],
         ],
       ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())
-          : _files.isEmpty
-              ? Center(child: Text('Нет файлов. Нажми + чтобы загрузить'))
+          : (_folders.isEmpty && _files.isEmpty
+              ? Center(child: Text('Нет файлов и папок. Нажми + чтобы добавить'))
               : ListView.builder(
                   padding: EdgeInsets.all(12),
-                  itemCount: _files.length,
-                  itemBuilder: (context, index) => FilePill(
-                    file: _files[index],
-                    index: index,
-                    onTap: () => _showFileMenu(_files[index]),
-                  ),
-                ),
+                  itemCount: _folders.length + _files.length,
+                  itemBuilder: (context, index) {
+                    if (index < _folders.length) {
+                      return FolderPill(
+                        folder: _folders[index],
+                        index: index,
+                        onTap: () {
+                          setState(() => _currentFolderId = _folders[index]['id']);
+                          _loadContent();
+                        },
+                        onLongPress: () => _showFolderMenu(_folders[index]),
+                      );
+                    } else {
+                      final fileIndex = index - _folders.length;
+                      return FilePill(
+                        file: _files[fileIndex],
+                        index: fileIndex,
+                        onTap: () => _showFileMenu(_files[fileIndex]),
+                      );
+                    }
+                  },
+                )),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _createFolder,
+        child: Icon(Icons.create_new_folder),
+        tooltip: 'Создать папку',
+      ),
     );
   }
 }
