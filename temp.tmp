@@ -104,3 +104,10 @@ curl -X POST https://gazonbaza.ru/toggle_visibility.php \
   -H "X-API-Token: b0f1ada207c277fc7327df7a1d735728e7c2b7507c055f658e22e502693c9d1a" \
   -H "Content-Type: application/json" \
   -d '{"id":10}'
+
+
+
+
+  # Поиск файлов по имени (замени ТОКЕН)
+curl -X GET "https://gazonbaza.ru/list_files.php?type=all&search=test" \
+  -H "X-API-Token: ec6e7f76f4a4d503fd2230a50bf4701cbf1d7c4be15556c335d315b536caec94"

@@ -18,6 +18,9 @@ class _FilesScreenState extends State<FilesScreen> {
   String _apiToken = '';
   int _currentUserId = 0;
   bool _isAdmin = false;
+  TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  bool _isSearching = false;
 
   @override
   void initState() {
@@ -47,7 +50,7 @@ class _FilesScreenState extends State<FilesScreen> {
   Future<void> _loadFiles() async {
     setState(() => _isLoading = true);
     try {
-      final files = await ApiService.getFiles(_apiToken);
+      final files = await ApiService.getFiles(_apiToken, search: _searchQuery);
       setState(() => _files = files);
     } catch (e) {
       print('Ошибка: $e');
@@ -222,7 +225,6 @@ class _FilesScreenState extends State<FilesScreen> {
     }
   }
 
-
   void _showFileMenu(dynamic file) {
     final ownerId = file['user_id'];
     final canDelete = _isAdmin || ownerId == _currentUserId;
@@ -242,8 +244,6 @@ class _FilesScreenState extends State<FilesScreen> {
             Text('Хозяин: ${file['owner_nickname']}'),
             Text('Дата: ${file['upload_date']}'),
             SizedBox(height: 8),
-
-
             InkWell(
               onTap: () async {
                 final success = await ApiService.toggleVisibility(_apiToken, file['id']);
@@ -278,12 +278,7 @@ class _FilesScreenState extends State<FilesScreen> {
                   ],
                 ),
               ),
-            ), 
-
-            
-
-
-
+            ),
             SizedBox(height: 12),
             ElevatedButton.icon(
               onPressed: () {
@@ -321,8 +316,6 @@ class _FilesScreenState extends State<FilesScreen> {
     );
   }
 
-
-
   Future<void> _logout() async {
     await AuthService.logout();
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => LoginScreen()));
@@ -332,23 +325,58 @@ class _FilesScreenState extends State<FilesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('🍖 Кусочница'),
+        title: _isSearching
+            ? TextField(
+                controller: _searchController,
+                autofocus: true,
+                style: TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Поиск файлов...',
+                  hintStyle: TextStyle(color: Colors.white54),
+                  border: InputBorder.none,
+                ),
+                onChanged: (value) {
+                  setState(() => _searchQuery = value);
+                  _loadFiles();
+                },
+              )
+            : Text('🍖 Кусочница'),
         actions: [
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'file') _pickAnyFile();
-              if (value == 'gallery') _pickImageFromGallery();
-              if (value == 'camera') _takePhoto();
+          IconButton(
+            icon: Icon(_isSearching ? Icons.close : Icons.search),
+            onPressed: () {
+              setState(() {
+                if (_isSearching) {
+                  // Закрываем поиск
+                  _isSearching = false;
+                  _searchController.clear();
+                  _searchQuery = '';
+                  _loadFiles();
+                } else {
+                  // Открываем поиск
+                  _isSearching = true;
+                  _searchQuery = '';
+                }
+              });
             },
-            icon: Icon(Icons.add),
-            itemBuilder: (context) => [
-              PopupMenuItem(value: 'file', child: Text('📎 Любой файл')),
-              PopupMenuItem(value: 'gallery', child: Text('🖼️ Фото из галереи')),
-              PopupMenuItem(value: 'camera', child: Text('📷 Фото с камеры')),
-            ],
           ),
-          IconButton(icon: Icon(Icons.logout), onPressed: _logout),
-          IconButton(icon: Icon(Icons.refresh), onPressed: _loadFiles),
+          if (!_isSearching) ...[
+            PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'file') _pickAnyFile();
+                if (value == 'gallery') _pickImageFromGallery();
+                if (value == 'camera') _takePhoto();
+              },
+              icon: Icon(Icons.add),
+              itemBuilder: (context) => [
+                PopupMenuItem(value: 'file', child: Text('📎 Любой файл')),
+                PopupMenuItem(value: 'gallery', child: Text('🖼️ Фото из галереи')),
+                PopupMenuItem(value: 'camera', child: Text('📷 Фото с камеры')),
+              ],
+            ),
+            IconButton(icon: Icon(Icons.logout), onPressed: _logout),
+            IconButton(icon: Icon(Icons.refresh), onPressed: _loadFiles),
+          ],
         ],
       ),
       body: _isLoading

@@ -38,9 +38,13 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
-  static Future<List<dynamic>> getFiles(String token) async {
+  static Future<List<dynamic>> getFiles(String token, {String search = ''}) async {
+    String url = '$_baseUrl/list_files.php?type=all';
+    if (search.isNotEmpty) {
+      url += '&search=${Uri.encodeQueryComponent(search)}';
+    }
     final response = await http.get(
-      Uri.parse('$_baseUrl/list_files.php?type=all'),
+      Uri.parse(url),
       headers: {
         'X-API-Token': token,
         'Host': _host,
@@ -52,6 +56,8 @@ class ApiService {
     }
     return [];
   }
+
+
 
   static Future<bool> uploadFile(String token, File file, String fileName, {bool isPublic = true}) async {
     var request = http.MultipartRequest(
