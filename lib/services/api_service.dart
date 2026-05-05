@@ -3,6 +3,15 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+// Класс для отмены операций
+class CancelToken {
+  bool isCancelled = false;
+  
+  void cancel() {
+    isCancelled = true;
+  }
+}
+
 class ApiService {
   static const String _baseUrl = 'https://90.156.171.36';
   static const String _host = 'gazonbaza.ru';
@@ -189,7 +198,6 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
-
   // Profile API
   static Future<Map<String, dynamic>> getProfile(String token) async {
     final url = Uri.parse('$_baseUrl/profile.php');
@@ -229,7 +237,140 @@ class ApiService {
     throw Exception('Failed to update profile');
   }
 
+  // ============ МЕТОДЫ С ПРОГРЕССОМ ============
+  
+  // Загрузка файла с прогрессом (упрощённая версия с симуляцией)
+  static Future<bool> uploadFileWithProgress(
+    String token,
+    File file,
+    String fileName, {
+    required Function(double) onProgress,
+    bool isPublic = false,
+    int? folderId,
+    CancelToken? cancelToken,
+  }) async {
+    // Симулируем прогресс от 0 до 0.9
+    int step = 0;
+    final timer = Stream.periodic(Duration(milliseconds: 100), (_) {
+      if (cancelToken?.isCancelled == true) return;
+      step += 5;
+      if (step <= 90) {
+        onProgress(step / 100);
+      }
+    });
+    
+    final subscription = timer.listen((_) {});
+    
+    try {
+      final result = await uploadFile(token, file, fileName, 
+        isPublic: isPublic, 
+        folderId: folderId,
+      );
+      
+      subscription.cancel();
+      
+      if (result && (cancelToken?.isCancelled != true)) {
+        onProgress(1.0);
+      }
+      
+      return result;
+    } catch (e) {
+      subscription.cancel();
+      rethrow;
+    }
+  }
+  
+  // Скачивание файла с прогрессом
+  static Future<bool> downloadFileWithProgress(
+    String token,
+    int fileId,
+    String fileName, {
+    required Function(double) onProgress,
+    CancelToken? cancelToken,
+  }) async {
+    final url = Uri.parse('$_baseUrl/download.php?id=$fileId');
+    final request = http.Request('GET', url);
+    request.headers['X-API-Token'] = token;
+    request.headers['Host'] = _host;
+    
+    final streamedResponse = await request.send();
+    
+    if (cancelToken?.isCancelled == true) return false;
+    
+    final contentLength = streamedResponse.contentLength;
+    final directory = await getDownloadsDirectory();
+    if (directory == null) return false;
+    
+    final file = File('${directory.path}/$fileName');
+    final sink = file.openWrite();
+    int receivedBytes = 0;
+    
+    try {
+      await for (final chunk in streamedResponse.stream) {
+        if (cancelToken?.isCancelled == true) {
+          await sink.close();
+          await file.delete();
+          return false;
+        }
+        receivedBytes += chunk.length;
+        sink.add(chunk);
+        if (contentLength != null) {
+          onProgress(receivedBytes / contentLength);
+        }
+      }
+      await sink.close();
+      onProgress(1.0);
+      return true;
+    } catch (e) {
+      await sink.close();
+      await file.delete();
+      rethrow;
+    }
+  }
 
+
+  // Скачивание файла с прогрессом (простая версия)
+  static Future<bool> downloadFileSimple(
+    String token,
+    int fileId,
+    String fileName, {
+    required Function(double) onProgress,
+  }) async {
+    final url = Uri.parse('$_baseUrl/download.php?id=$fileId');
+    final request = http.Request('GET', url);
+    request.headers['X-API-Token'] = token;
+    request.headers['Host'] = _host;
+    
+    final streamedResponse = await request.send();
+    final contentLength = streamedResponse.contentLength;
+    
+    final directory = await getDownloadsDirectory();
+    if (directory == null) return false;
+    
+    final file = File('${directory.path}/$fileName');
+    final sink = file.openWrite();
+    int receivedBytes = 0;
+    
+    await streamedResponse.stream.listen(
+      (chunk) {
+        receivedBytes += chunk.length;
+        sink.add(chunk);
+        if (contentLength != null) {
+          onProgress(receivedBytes / contentLength);
+        }
+      },
+      onDone: () async {
+        await sink.close();
+        onProgress(1.0);
+      },
+      onError: (error) async {
+        await sink.close();
+        throw error;
+      },
+    ).asFuture();
+    
+    return true;
+  }
 
 
 
