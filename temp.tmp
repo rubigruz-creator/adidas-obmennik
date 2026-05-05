@@ -122,8 +122,23 @@ curl -X GET "https://gazonbaza.ru/list_files.php?type=all&search=test" \
   01e2999829ca65e60d6298a585f7be63af822e19ec2763407f017f7e850fd9c6
 
 
-curl -X POST https://gazonbaza.ru/upload.php \
-  -H "X-API-Token: 01e2999829ca65e60d6298a585f7be63af822e19ec2763407f017f7e850fd9c6" \
-  -F "file=@/tmp/test.txt" \
-  -F "is_public=1" \
-  -F "folder_id=123"
+
+
+# Получить профиль
+curl -X GET https://gazonbaza.ru/profile.php \
+  -H "X-API-Token: d34d7c0e032ceb3b256787b92686fd9c6a51287f5e025c70ab39fb264fc08582"
+
+# Обновить профиль
+curl -X POST https://gazonbaza.ru/profile.php \
+  -H "X-API-Token: d34d7c0e032ceb3b256787b92686fd9c6a51287f5e025c70ab39fb264fc08582" \
+  -H "Content-Type: application/json" \
+  -d '{"nickname":"новыйник","position":"Team Lead"}'
+
+
+
+
+  1. Сначала получите новый токен через логин:
+bash
+curl -X POST https://gazonbaza.ru/login.php \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"111111","password":"111111"}'

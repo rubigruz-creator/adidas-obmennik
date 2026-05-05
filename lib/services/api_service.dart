@@ -154,43 +154,80 @@ class ApiService {
     return response.statusCode == 200;
   }
 
-static Future<Map<String, dynamic>> register(String phone, String password, String nickname, String fullName, String position) async {
-  final url = Uri.parse('$_baseUrl/register.php');
-  final response = await http.post(
-    url,
-    headers: {
-      'Content-Type': 'application/json',
-      'Host': _host,
-    },
-    body: jsonEncode({
-      'phone': phone,
-      'password': password,
-      'nickname': nickname,
-      'full_name': fullName,
-      'position': position,
-    }),
-  );
-  return jsonDecode(response.body);
-}
+  static Future<Map<String, dynamic>> register(String phone, String password, String nickname, String fullName, String position) async {
+    final url = Uri.parse('$_baseUrl/register.php');
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Host': _host,
+      },
+      body: jsonEncode({
+        'phone': phone,
+        'password': password,
+        'nickname': nickname,
+        'full_name': fullName,
+        'position': position,
+      }),
+    );
+    return jsonDecode(response.body);
+  }     
 
-static Future<Map<String, dynamic>> login(String phone, String password) async {
-  final url = Uri.parse('$_baseUrl/login.php');
-  final response = await http.post(
-    url,
-    headers: {
-      'Content-Type': 'application/json',
-      'Host': _host,
-    },
-    body: jsonEncode({
-      'phone': phone,
-      'password': password,
-    }),
-  );
-  return jsonDecode(response.body);
-}
+  static Future<Map<String, dynamic>> login(String phone, String password) async {
+    final url = Uri.parse('$_baseUrl/login.php');
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Host': _host,
+      },
+      body: jsonEncode({
+        'phone': phone,
+        'password': password,
+      }),
+    );
+    return jsonDecode(response.body);
+  }
 
 
+  // Profile API
+  static Future<Map<String, dynamic>> getProfile(String token) async {
+    final url = Uri.parse('$_baseUrl/profile.php');
+    final request = http.Request('GET', url);
+    request.headers['X-API-Token'] = token;
+    request.headers['Host'] = _host;
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+    
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['status'] == 'success') {
+        return data['data'];
+      }
+    }
+    throw Exception('Failed to load profile');
+  }
 
+  static Future<Map<String, dynamic>> updateProfile(String token, {
+    String? nickname,
+    String? fullName,
+    String? position,
+  }) async {
+    final body = <String, dynamic>{};
+    if (nickname != null) body['nickname'] = nickname;
+    if (fullName != null) body['full_name'] = fullName;
+    if (position != null) body['position'] = position;
+    
+    final response = await _post(token, '/profile.php', body);
+    
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['status'] == 'success') {
+        return data['data'];
+      }
+    }
+    throw Exception('Failed to update profile');
+  }
 
 
 

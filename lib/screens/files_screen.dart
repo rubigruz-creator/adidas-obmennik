@@ -7,6 +7,7 @@ import '../services/auth_service.dart';
 import '../widgets/file_pill.dart';
 import '../widgets/folder_pill.dart';
 import 'login_screen.dart';
+import 'profile_screen.dart';
 
 class FilesScreen extends StatefulWidget {
   @override
@@ -566,41 +567,64 @@ class _FilesScreenState extends State<FilesScreen> {
                       ),
                     ],
                   )),
-        actions: [
-          IconButton(
-            icon: Icon(_isSearching ? Icons.close : Icons.search),
-            onPressed: () {
-              setState(() {
-                if (_isSearching) {
-                  _isSearching = false;
-                  _searchController.clear();
-                  _searchQuery = '';
-                  _loadContent();
-                } else {
-                  _isSearching = true;
-                  _searchQuery = '';
-                }
-              });
-            },
-          ),
-          if (!_isSearching) ...[
-            PopupMenuButton<String>(
-              onSelected: (value) {
-                if (value == 'file') _pickAnyFile();
-                if (value == 'gallery') _pickImageFromGallery();
-                if (value == 'camera') _takePhoto();
-              },
-              icon: Icon(Icons.add),
-              itemBuilder: (context) => [
-                PopupMenuItem(value: 'file', child: Text('📎 Любой файл')),
-                PopupMenuItem(value: 'gallery', child: Text('🖼️ Фото из галереи')),
-                PopupMenuItem(value: 'camera', child: Text('📷 Фото с камеры')),
-              ],
-            ),
-            IconButton(icon: Icon(Icons.logout), onPressed: _logout),
-            IconButton(icon: Icon(Icons.refresh), onPressed: _loadContent),
-          ],
-        ],
+
+                  actions: [
+                    IconButton(
+                      icon: Icon(_isSearching ? Icons.close : Icons.search),
+                      onPressed: () {
+                        setState(() {
+                          if (_isSearching) {
+                            _isSearching = false;
+                            _searchController.clear();
+                            _searchQuery = '';
+                            _loadContent();
+                          } else {
+                            _isSearching = true;
+                            _searchQuery = '';
+                          }
+                        });
+                      },
+                    ),
+                    if (!_isSearching) ...[
+                      IconButton(
+                        icon: Icon(Icons.person),
+                        onPressed: () async {
+                          final needRefresh = await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ProfileScreen(apiToken: _apiToken),
+                            ),
+                          );
+                          if (needRefresh == true) {
+                            // Обновляем данные пользователя в SharedPreferences
+                            final updatedNickname = await AuthService.getUserNickname();
+                            setState(() {}); // Перерисовываем AppBar (если ник отображается)
+                            // Также обновляем список файлов, если нужно
+                            await _loadContent();
+                          }
+                        },
+                        tooltip: 'Профиль',
+                      ),
+                      PopupMenuButton<String>(
+                        onSelected: (value) {
+                          if (value == 'file') _pickAnyFile();
+                          if (value == 'gallery') _pickImageFromGallery();
+                          if (value == 'camera') _takePhoto();
+                        },
+                        icon: Icon(Icons.add),
+                        itemBuilder: (context) => [
+                          PopupMenuItem(value: 'file', child: Text('📎 Любой файл')),
+                          PopupMenuItem(value: 'gallery', child: Text('🖼️ Фото из галереи')),
+                          PopupMenuItem(value: 'camera', child: Text('📷 Фото с камеры')),
+                        ],
+                      ),
+                      IconButton(icon: Icon(Icons.logout), onPressed: _logout),
+                      IconButton(icon: Icon(Icons.refresh), onPressed: _loadContent),
+                    ],
+                  ],
+
+
+
       ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())

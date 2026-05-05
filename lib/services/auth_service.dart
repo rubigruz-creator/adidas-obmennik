@@ -53,4 +53,17 @@ class AuthService {
     await prefs.remove(_userIdKey);
     await prefs.remove(_isAdminKey);
   }
+  
+  // Метод для сохранения всех данных пользователя (удобный)
+  static Future<void> saveUserData({
+    required String token,
+    required int userId,
+    required String nickname,
+    required int isAdmin,
+  }) async {
+    await saveToken(token);
+    await saveUserId(userId);
+    await saveUserNickname(nickname);
+    await saveIsAdmin(isAdmin);
+  }
 }
