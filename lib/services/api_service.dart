@@ -57,8 +57,6 @@ class ApiService {
     return [];
   }
 
-
-
   static Future<bool> uploadFile(String token, File file, String fileName, {bool isPublic = true}) async {
     var request = http.MultipartRequest(
       'POST',
@@ -95,7 +93,6 @@ class ApiService {
     return false;
   }
 
-  // ПЕРЕИМЕНОВАНИЕ ФАЙЛА
   static Future<bool> renameFile(String token, int fileId, String newName) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/rename.php'),
@@ -116,7 +113,6 @@ class ApiService {
     return false;
   }
 
-  // ПЕРЕКЛЮЧЕНИЕ ВИДИМОСТИ ФАЙЛА
   static Future<bool> toggleVisibility(String token, int fileId) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/toggle_visibility.php'),
@@ -134,7 +130,6 @@ class ApiService {
     return false;
   }
 
-  // УДАЛЕНИЕ ФАЙЛА
   static Future<bool> deleteFile(String token, int fileId) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/delete.php?id=$fileId'),

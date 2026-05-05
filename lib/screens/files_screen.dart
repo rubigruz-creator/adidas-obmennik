@@ -18,7 +18,7 @@ class _FilesScreenState extends State<FilesScreen> {
   String _apiToken = '';
   int _currentUserId = 0;
   bool _isAdmin = false;
-  TextEditingController _searchController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   bool _isSearching = false;
 
@@ -32,18 +32,18 @@ class _FilesScreenState extends State<FilesScreen> {
     final token = await AuthService.getToken();
     final userId = await AuthService.getUserId();
     final isAdmin = await AuthService.getIsAdmin();
-    
+
     if (token == null) {
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => LoginScreen()));
       return;
     }
-    
+
     setState(() {
       _apiToken = token;
       _currentUserId = userId ?? 0;
       _isAdmin = isAdmin == 1;
     });
-    
+
     _loadFiles();
   }
 
@@ -53,7 +53,9 @@ class _FilesScreenState extends State<FilesScreen> {
       final files = await ApiService.getFiles(_apiToken, search: _searchQuery);
       setState(() => _files = files);
     } catch (e) {
-      print('Ошибка: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка загрузки файлов')),
+      );
     } finally {
       setState(() => _isLoading = false);
     }
@@ -134,14 +136,14 @@ class _FilesScreenState extends State<FilesScreen> {
 
   Future<void> _deleteFile(int fileId, String fileName, int ownerId) async {
     final canDelete = _isAdmin || ownerId == _currentUserId;
-    
+
     if (!canDelete) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('❌ Нет прав на удаление этого файла')),
       );
       return;
     }
-    
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -156,7 +158,7 @@ class _FilesScreenState extends State<FilesScreen> {
         ],
       ),
     );
-    
+
     if (confirm == true) {
       final success = await ApiService.deleteFile(_apiToken, fileId);
       if (success) {
@@ -175,16 +177,16 @@ class _FilesScreenState extends State<FilesScreen> {
   Future<void> _renameFile(dynamic file) async {
     final ownerId = file['user_id'];
     final canRename = _isAdmin || ownerId == _currentUserId;
-    
+
     if (!canRename) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Нет прав на переименование')),
       );
       return;
     }
-    
+
     final controller = TextEditingController(text: file['original_name']);
-    
+
     final newName = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -209,7 +211,7 @@ class _FilesScreenState extends State<FilesScreen> {
         ],
       ),
     );
-    
+
     if (newName != null && newName.isNotEmpty && newName != file['original_name']) {
       final success = await ApiService.renameFile(_apiToken, file['id'], newName);
       if (success) {
@@ -229,7 +231,7 @@ class _FilesScreenState extends State<FilesScreen> {
     final ownerId = file['user_id'];
     final canDelete = _isAdmin || ownerId == _currentUserId;
     final isPublic = file['is_public'] == 1;
-    
+
     showModalBottomSheet(
       context: context,
       builder: (context) => Container(
@@ -347,13 +349,11 @@ class _FilesScreenState extends State<FilesScreen> {
             onPressed: () {
               setState(() {
                 if (_isSearching) {
-                  // Закрываем поиск
                   _isSearching = false;
                   _searchController.clear();
                   _searchQuery = '';
                   _loadFiles();
                 } else {
-                  // Открываем поиск
                   _isSearching = true;
                   _searchQuery = '';
                 }
