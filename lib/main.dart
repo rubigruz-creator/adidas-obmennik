@@ -1,8 +1,18 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'screens/login_screen.dart';
 
 void main() {
+  HttpOverrides.global = MyHttpOverrides();
   runApp(KusotschnitsaApp());
+}
+
+class MyHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback = (cert, host, port) => true;
+  }
 }
 
 class KusotschnitsaApp extends StatelessWidget {

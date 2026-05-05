@@ -433,7 +433,7 @@ header('Access-Control-Allow-Headers: X-API-Token, Content-Type');
 
 *   **Телефон:** `111111`
     
-*   **Пароль:** `password` (после сброса)
+*   **Пароль:** `111111` (после сброса)
     
 *   **is\_admin:** 1
     

@@ -56,8 +56,28 @@ class _FilesScreenState extends State<FilesScreen> {
     }
   }
 
-  Future<void> _uploadFile(File file, String fileName) async {
-    final success = await ApiService.uploadFile(_apiToken, file, fileName);
+  Future<bool> _showVisibilityDialog() async {
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Тип файла'),
+        content: Text('Сделать файл доступным для всех?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Личный'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Общий'),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
+  Future<void> _uploadFile(File file, String fileName, bool isPublic) async {
+    final success = await ApiService.uploadFile(_apiToken, file, fileName, isPublic: isPublic);
     if (success) {
       _loadFiles();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -74,14 +94,16 @@ class _FilesScreenState extends State<FilesScreen> {
     FilePickerResult? result = await FilePicker.platform.pickFiles();
     if (result == null) return;
     final file = File(result.files.first.path!);
-    await _uploadFile(file, result.files.first.name);
+    final isPublic = await _showVisibilityDialog();
+    await _uploadFile(file, result.files.first.name, isPublic);
   }
 
   Future<void> _pickImageFromGallery() async {
     final picker = ImagePicker();
     final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery);
     if (pickedFile != null) {
-      await _uploadFile(File(pickedFile.path), pickedFile.name);
+      final isPublic = await _showVisibilityDialog();
+      await _uploadFile(File(pickedFile.path), pickedFile.name, isPublic);
     }
   }
 
@@ -89,7 +111,8 @@ class _FilesScreenState extends State<FilesScreen> {
     final picker = ImagePicker();
     final XFile? pickedFile = await picker.pickImage(source: ImageSource.camera);
     if (pickedFile != null) {
-      await _uploadFile(File(pickedFile.path), pickedFile.name);
+      final isPublic = await _showVisibilityDialog();
+      await _uploadFile(File(pickedFile.path), pickedFile.name, isPublic);
     }
   }
 
@@ -107,7 +130,6 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   Future<void> _deleteFile(int fileId, String fileName, int ownerId) async {
-    // Проверка прав: админ или владелец
     final canDelete = _isAdmin || ownerId == _currentUserId;
     
     if (!canDelete) {
@@ -146,7 +168,6 @@ class _FilesScreenState extends State<FilesScreen> {
       }
     }
   }
-
 
   Future<void> _renameFile(dynamic file) async {
     final ownerId = file['user_id'];
@@ -202,12 +223,10 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
 
-
-
-
   void _showFileMenu(dynamic file) {
     final ownerId = file['user_id'];
     final canDelete = _isAdmin || ownerId == _currentUserId;
+    final isPublic = file['is_public'] == 1;
     
     showModalBottomSheet(
       context: context,
@@ -222,7 +241,50 @@ class _FilesScreenState extends State<FilesScreen> {
             Text('Тип: ${file['file_type']}'),
             Text('Хозяин: ${file['owner_nickname']}'),
             Text('Дата: ${file['upload_date']}'),
-            SizedBox(height: 20),
+            SizedBox(height: 8),
+
+
+            InkWell(
+              onTap: () async {
+                final success = await ApiService.toggleVisibility(_apiToken, file['id']);
+                if (success) {
+                  Navigator.pop(context);
+                  _loadFiles();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(isPublic ? '🔒 Стал личным' : '🌍 Стал общим')),
+                  );
+                }
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isPublic ? Icons.public : Icons.lock,
+                      size: 18,
+                      color: isPublic ? Colors.green : Colors.orange,
+                    ),
+                    SizedBox(width: 6),
+                    Text(
+                      isPublic ? 'Общий файл (нажми сменить)' : 'Личный файл (нажми сменить)',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: isPublic ? Colors.green : Colors.orange,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ), 
+
+            
+
+
+
+            SizedBox(height: 12),
             ElevatedButton.icon(
               onPressed: () {
                 Navigator.pop(context);
@@ -231,7 +293,6 @@ class _FilesScreenState extends State<FilesScreen> {
               icon: Icon(Icons.download),
               label: Text('Скачать'),
             ),
-
             SizedBox(height: 10),
             ElevatedButton.icon(
               onPressed: () {
@@ -242,11 +303,6 @@ class _FilesScreenState extends State<FilesScreen> {
               label: Text('Переименовать'),
               style: ElevatedButton.styleFrom(backgroundColor: Colors.blue.shade100),
             ),
-
-
-
-
-
             if (canDelete) ...[
               SizedBox(height: 10),
               ElevatedButton.icon(
@@ -264,6 +320,8 @@ class _FilesScreenState extends State<FilesScreen> {
       ),
     );
   }
+
+
 
   Future<void> _logout() async {
     await AuthService.logout();

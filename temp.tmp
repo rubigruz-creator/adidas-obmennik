@@ -12,6 +12,7 @@ https://90.156.171.36:8083/
 Подключение:
 root@90.156.171.36
 
+
 ssh root@90.156.171.36
 
 
@@ -74,6 +75,32 @@ echo "Hello Kusotschnitsa" > /tmp/test.txt
 
 curl -X POST https://gazonbaza.ru/upload.php \
   -H "X-API-Token: 56822754785afd8ba3f22d46888f839c27ed675de16dd083f4945c1261ab85c3" \
-  
+
   -F "file=@/tmp/test.txt" \
   -F "is_public=1"
+
+
+
+
+  +=======
+  Новый токен
+
+b0f1ada207c277fc7327df7a1d735728e7c2b7507c055f658e22e502693c9d1a
+
+
+
+
+  # Получаем свежий токен
+curl -X POST https://gazonbaza.ru/login.php \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"111111","password":"111111"}'
+{"status":"success","api_token":"b0f1ada207c277fc7327df7a1d735728e7c2b7507c055f658e22e502693c9d1a","user":{"id":2,"nickname":"111111","full_name":"\u041f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044c","position":"\u0421\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a","is_admin":1},"expires_at":"2026-06-04 07:53:00"}root@xbcohciywb:~#
+
+
+
+
+# Переключаем видимость с новым токеном
+curl -X POST https://gazonbaza.ru/toggle_visibility.php \
+  -H "X-API-Token: b0f1ada207c277fc7327df7a1d735728e7c2b7507c055f658e22e502693c9d1a" \
+  -H "Content-Type: application/json" \
+  -d '{"id":10}'
