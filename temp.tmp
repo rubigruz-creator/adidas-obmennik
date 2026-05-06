@@ -18,6 +18,20 @@ ssh root@90.156.171.36
 
 N%u2OKt5
 
+
+
+ssh rubi@90.156.171.36 -t "cd /home/rubi/websocket_service && sudo -i"
+
+
+
+
+
+
+
+
+
+
+
 MariaDB
 Kaliningrad1972
 

@@ -282,7 +282,8 @@ json
 php
 $currentUser = authenticate($pdo);
 // возвращает id, phone, nickname, full_name, position, is_admin
-📱 ЧАСТЬ 4: FLUTTER-ПРИЛОЖЕНИЕ (v3.1)
+
+# 📱 ЧАСТЬ 4: FLUTTER-ПРИЛОЖЕНИЕ (v3.1)
 Технологии
 Фреймворк: Flutter (Dart)
 
@@ -391,7 +392,8 @@ xml
 <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
 <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
 android:usesCleartextTraffic="true"
-📁 ЧАСТЬ 5: ХРАНИЛИЩЕ ФАЙЛОВ
+
+# 📁 ЧАСТЬ 5: ХРАНИЛИЩЕ ФАЙЛОВ
 Расположение
 /home/rubi/web/gazonbaza.ru/public_html/files/
 
@@ -409,7 +411,7 @@ chown rubi:www-data /home/rubi/web/gazonbaza.ru/public_html/files
 Лимиты
 Максимальный размер файла: 300 МБ (настраивается в php.ini и в проверке upload.php)
 
-🔐 ЧАСТЬ 6: БЕЗОПАСНОСТЬ
+# 🔐 ЧАСТЬ 6: БЕЗОПАСНОСТЬ
 Авторизация
 API-токен длиной 64 символа (bin2hex(random_bytes(32)))
 
@@ -446,7 +448,8 @@ CORS
 php
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: X-API-Token, Content-Type');
-🧪 ЧАСТЬ 7: ТЕСТОВЫЕ ДАННЫЕ
+
+# 🧪 ЧАСТЬ 7: ТЕСТОВЫЕ ДАННЫЕ
 Администратор
 Телефон: 111111
 
@@ -513,7 +516,8 @@ curl -X POST https://gazonbaza.ru/delete_folder.php \
   -H "X-API-Token: ТОКЕН" \
   -H "Content-Type: application/json" \
   -d '{"id":1,"force":true}'
-🗺️ КАРТА ПРОЕКТА (для ИИ-агентов)
+
+# 🗺️ КАРТА ПРОЕКТА (для ИИ-агентов)
 text
 КОРЕНЬ ПРОЕКТА: /home/rubi/web/gazonbaza.ru/
 │
@@ -544,7 +548,8 @@ text
 ├── logs/                     # Логи домена
 ├── private/                  # Приватные файлы
 └── stats/                    # Статистика
-📋 СХЕМА БАЗЫ ДАННЫХ (актуальная)
+
+# 📋 СХЕМА БАЗЫ ДАННЫХ (актуальная)
 text
 avito_shop
 │
