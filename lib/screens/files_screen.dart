@@ -268,6 +268,7 @@ class _FilesScreenState extends State<FilesScreen>
     return _applySorting(result);
   }
 
+
   List<dynamic> _applySorting(List<dynamic> items) {
     List<dynamic> sorted = List.from(items);
     switch (sortBy) {
@@ -281,6 +282,26 @@ class _FilesScreenState extends State<FilesScreen>
             ? (a['file_size'] ?? 0).compareTo(b['file_size'] ?? 0)
             : (b['file_size'] ?? 0).compareTo(a['file_size'] ?? 0));
         break;
+      case 'owner':
+        // Сортировка по хозяину (owner_nickname), если нет - по owner_id
+        sorted.sort((a, b) {
+          final aOwner = (a['owner_nickname'] ?? 'яяя').toString().toLowerCase();
+          final bOwner = (b['owner_nickname'] ?? 'яяя').toString().toLowerCase();
+          return sortAsc 
+              ? aOwner.compareTo(bOwner) 
+              : bOwner.compareTo(aOwner);
+        });
+        break;
+      case 'visibility':
+        // Сортировка по типу: сначала общие (1), потом личные (0)
+        sorted.sort((a, b) {
+          final aPublic = a['is_public'] == 1 ? 1 : 0;
+          final bPublic = b['is_public'] == 1 ? 1 : 0;
+          return sortAsc 
+              ? aPublic.compareTo(bPublic) 
+              : bPublic.compareTo(aPublic);
+        });
+        break;
       case 'date':
       default:
         sorted.sort((a, b) => sortAsc
@@ -290,6 +311,7 @@ class _FilesScreenState extends State<FilesScreen>
     }
     return sorted;
   }
+
 
   Future<void> logout() async {
     WebSocketService().disconnect();
@@ -312,13 +334,56 @@ class _FilesScreenState extends State<FilesScreen>
       builder: (context) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ListTile(title: Text('По дате'), leading: Icon(Icons.date_range), onTap: () { setState(() { sortBy = 'date'; sortAsc = false; }); loadContent(); Navigator.pop(context); }),
-          ListTile(title: Text('По имени'), leading: Icon(Icons.sort_by_alpha), onTap: () { setState(() { sortBy = 'name'; sortAsc = true; }); loadContent(); Navigator.pop(context); }),
-          ListTile(title: Text('По размеру'), leading: Icon(Icons.data_usage), onTap: () { setState(() { sortBy = 'size'; sortAsc = false; }); loadContent(); Navigator.pop(context); }),
+          ListTile(
+            title: Text('По дате'), 
+            leading: Icon(Icons.date_range), 
+            onTap: () { 
+              setState(() { sortBy = 'date'; sortAsc = false; }); 
+              loadContent(); 
+              Navigator.pop(context); 
+            },
+          ),
+          ListTile(
+            title: Text('По имени'), 
+            leading: Icon(Icons.sort_by_alpha), 
+            onTap: () { 
+              setState(() { sortBy = 'name'; sortAsc = true; }); 
+              loadContent(); 
+              Navigator.pop(context); 
+            },
+          ),
+          ListTile(
+            title: Text('По размеру'), 
+            leading: Icon(Icons.data_usage), 
+            onTap: () { 
+              setState(() { sortBy = 'size'; sortAsc = false; }); 
+              loadContent(); 
+              Navigator.pop(context); 
+            },
+          ),
+          ListTile(
+            title: Text('По хозяину'), 
+            leading: Icon(Icons.person), 
+            onTap: () { 
+              setState(() { sortBy = 'owner'; sortAsc = true; }); // А-Я
+              loadContent(); 
+              Navigator.pop(context); 
+            },
+          ),
+          ListTile(
+            title: Text('По типу (Общий/Личный)'), 
+            leading: Icon(Icons.visibility), 
+            onTap: () { 
+              setState(() { sortBy = 'visibility'; sortAsc = false; }); // Общие сверху
+              loadContent(); 
+              Navigator.pop(context); 
+            },
+          ),
         ],
       ),
     );
   }
+
 
   void showFABMenu() {
     showModalBottomSheet(
