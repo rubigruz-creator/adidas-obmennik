@@ -141,17 +141,86 @@ class _FilesScreenState extends State<FilesScreen>
     }
   }
 
+
   Future<void> _loadFolderPath() async {
-    final allFolders = await ApiService.getFolders(apiToken);
-    List<Map<String, dynamic>> path = [];
-    int? id = currentFolderId;
-    while (id != null) {
-      final folder = allFolders.firstWhere((f) => f['id'] == id, orElse: () => null);
-      if (folder == null) break;
-      path.insert(0, {'id': folder['id'], 'name': folder['name']});
-      id = folder['parent_id'];
+    try {
+      // Загружаем ВСЕ папки одним запросом
+      final allFolders = await ApiService.getFolders(apiToken);
+      
+      List<Map<String, dynamic>> path = [];
+      int? id = currentFolderId;
+      
+      // Строим цепочку от текущей папки до самого корня
+      while (id != null) {
+        // Ищем папку в общем списке
+        Map<String, dynamic>? folder;
+        try {
+          folder = allFolders.firstWhere(
+            (f) => f['id'] == id,
+          );
+        } catch (_) {
+          folder = null;
+        }
+        
+        if (folder == null) {
+          debugPrint('⚠️ Папка с id=$id не найдена в allFolders');
+          break;
+        }
+        
+        // Вставляем в начало пути
+        path.insert(0, {
+          'id': folder['id'],
+          'name': folder['name'],
+        });
+        
+        // Поднимаемся к родительской папке
+        id = folder['parent_id'];
+      }
+      
+      if (mounted) {
+        setState(() {
+          folderPath = path;
+        });
+        debugPrint('📁 Путь папок: Главная → ${path.map((e) => e['name']).join(' → ')}');
+      }
+    } catch (e) {
+      debugPrint('❌ Ошибка загрузки пути папок: $e');
+      if (mounted) {
+        setState(() => folderPath = []);
+      }
     }
-    if (mounted) setState(() => folderPath = path);
+  }
+
+
+
+
+  /// Возврат к родительской папке или в корень
+  void _goToParentFolder() {
+    if (folderPath.length > 1) {
+      // Есть родительская папка
+      final parentFolder = folderPath[folderPath.length - 2];
+      setState(() {
+        currentFolderId = parentFolder['id'];
+      });
+    } else {
+      // Возврат в корень
+      setState(() {
+        currentFolderId = null;
+        folderPath = [];
+      });
+    }
+    loadContent();
+  }
+
+  /// Обработка системной кнопки "Назад"
+  Future<bool> _onWillPop() async {
+    if (currentFolderId != null) {
+      // Если мы в подпапке, возвращаемся на уровень выше
+      _goToParentFolder();
+      return false; // Не выходим из приложения
+    }
+    // В корне — стандартное поведение (выход/сворачивание)
+    return true;
   }
 
   List<dynamic> _applyFiltersAndSorting(List<dynamic> fileList) {
@@ -279,100 +348,115 @@ class _FilesScreenState extends State<FilesScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: isSearching
-            ? TextField(
-                controller: _searchController,
-                autofocus: true,
-                style: TextStyle(color: theme.colorScheme.onPrimary),
-                decoration: InputDecoration(
-                  hintText: 'Поиск файлов...',
-                  hintStyle: TextStyle(color: theme.colorScheme.onPrimary.withOpacity(0.5)),
-                  border: InputBorder.none,
-                ),
-                onChanged: (value) {
-                  debounceTimer?.cancel();
-                  debounceTimer = Timer(Duration(milliseconds: 300), () {
-                    setState(() => _searchQuery = value);
-                    loadContent();
-                  });
-                },
-              )
-            : (folderPath.isEmpty
-                ? Text('🍖 Кусочница')
-                : Text(folderPath.last['name'])),
-        actions: [
-          IconButton(
-            icon: Icon(isSearching ? Icons.close : Icons.search),
-            onPressed: () {
-              setState(() {
-                if (isSearching) {
-                  isSearching = false;
-                  _searchController.clear();
-                  _searchQuery = '';
-                  loadContent();
-                } else {
-                  isSearching = true;
-                  _searchQuery = '';
-                }
-              });
-            },
-          ),
-          if (!isSearching) ...[
-            IconButton(icon: Icon(viewMode == ViewMode.grid ? Icons.list : Icons.grid_view), onPressed: toggleViewMode, tooltip: viewMode == ViewMode.grid ? 'Список' : 'Сетка'),
-            IconButton(icon: Icon(Icons.sort), onPressed: showSortMenu, tooltip: 'Сортировка'),
-            IconButton(icon: Icon(Icons.person), onPressed: () async {
-              final needRefresh = await Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(apiToken: apiToken)));
-              if (needRefresh == true && mounted) await loadContent();
-            }, tooltip: 'Профиль'),
-            IconButton(icon: Icon(Icons.logout), onPressed: logout),
-          ],
-        ],
-      ),
-      body: Column(
-        children: [
-          if (folderPath.isNotEmpty)
-            BreadcrumbChips(path: folderPath, onSelected: (folderId, index) { setState(() => currentFolderId = folderId); loadContent(); }),
-          if (isSearching)
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: Wrap(
-                spacing: 6,
-                children: ['Все', 'image', 'pdf', 'doc', 'xls', 'archive', 'audio', 'video', 'text', 'code', 'apk'].map((type) {
-                  final selected = type == 'Все' ? typeFilters.isEmpty : typeFilters.contains(type);
-                  return FilterChip(
-                    label: Text(type == 'Все' ? 'Все' : type),
-                    selected: selected,
-                    onSelected: (val) {
-                      setState(() {
-                        if (type == 'Все') { typeFilters.clear(); } else { if (val) typeFilters.add(type); else typeFilters.remove(type); }
-                      });
+    return PopScope(
+      canPop: currentFolderId == null, // Можно выйти только из корня
+      onPopInvokedWithResult: (didPop, result) async {
+        if (!didPop && currentFolderId != null) {
+          _goToParentFolder();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: currentFolderId != null
+              ? IconButton(
+                  icon: Icon(Icons.arrow_back),
+                  onPressed: _goToParentFolder,
+                  tooltip: 'Назад',
+                )
+              : null,
+          title: isSearching
+              ? TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  style: TextStyle(color: theme.colorScheme.onPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'Поиск файлов...',
+                    hintStyle: TextStyle(color: theme.colorScheme.onPrimary.withOpacity(0.5)),
+                    border: InputBorder.none,
+                  ),
+                  onChanged: (value) {
+                    debounceTimer?.cancel();
+                    debounceTimer = Timer(Duration(milliseconds: 300), () {
+                      setState(() => _searchQuery = value);
                       loadContent();
-                    },
-                  );
-                }).toList(),
-              ),
+                    });
+                  },
+                )
+              : (folderPath.isEmpty
+                  ? Text('🍖 Кусочница')
+                  : Text(folderPath.last['name'])),
+          actions: [
+            IconButton(
+              icon: Icon(isSearching ? Icons.close : Icons.search),
+              onPressed: () {
+                setState(() {
+                  if (isSearching) {
+                    isSearching = false;
+                    _searchController.clear();
+                    _searchQuery = '';
+                    loadContent();
+                  } else {
+                    isSearching = true;
+                    _searchQuery = '';
+                  }
+                });
+              },
             ),
-          Expanded(
-            child: isLoading
-                ? Center(child: CircularProgressIndicator())
-                : folders.isEmpty && files.isEmpty
-                    ? EmptyState()
-                    : RefreshIndicator(
-                        onRefresh: loadContent,
-                        child: AnimatedSwitcher(
-                          duration: Duration(milliseconds: 300),
-                          child: viewMode == ViewMode.grid ? buildGridView() : buildListView(),
+            if (!isSearching) ...[
+              IconButton(icon: Icon(viewMode == ViewMode.grid ? Icons.list : Icons.grid_view), onPressed: toggleViewMode, tooltip: viewMode == ViewMode.grid ? 'Список' : 'Сетка'),
+              IconButton(icon: Icon(Icons.sort), onPressed: showSortMenu, tooltip: 'Сортировка'),
+              IconButton(icon: Icon(Icons.person), onPressed: () async {
+                final needRefresh = await Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(apiToken: apiToken)));
+                if (needRefresh == true && mounted) await loadContent();
+              }, tooltip: 'Профиль'),
+              IconButton(icon: Icon(Icons.logout), onPressed: logout),
+            ],
+          ],
+        ),
+        body: Column(
+          children: [
+            if (folderPath.isNotEmpty)
+              BreadcrumbChips(path: folderPath, onSelected: (folderId, index) { setState(() => currentFolderId = folderId); loadContent(); }),
+            if (isSearching)
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: Wrap(
+                  spacing: 6,
+                  children: ['Все', 'image', 'pdf', 'doc', 'xls', 'archive', 'audio', 'video', 'text', 'code', 'apk'].map((type) {
+                    final selected = type == 'Все' ? typeFilters.isEmpty : typeFilters.contains(type);
+                    return FilterChip(
+                      label: Text(type == 'Все' ? 'Все' : type),
+                      selected: selected,
+                      onSelected: (val) {
+                        setState(() {
+                          if (type == 'Все') { typeFilters.clear(); } else { if (val) typeFilters.add(type); else typeFilters.remove(type); }
+                        });
+                        loadContent();
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+            Expanded(
+              child: isLoading
+                  ? Center(child: CircularProgressIndicator())
+                  : folders.isEmpty && files.isEmpty
+                      ? EmptyState()
+                      : RefreshIndicator(
+                          onRefresh: loadContent,
+                          child: AnimatedSwitcher(
+                            duration: Duration(milliseconds: 300),
+                            child: viewMode == ViewMode.grid ? buildGridView() : buildListView(),
+                          ),
                         ),
-                      ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: showFABMenu,
-        child: Icon(Icons.add),
-        tooltip: 'Добавить',
+            ),
+          ],
+        ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: showFABMenu,
+          child: Icon(Icons.add),
+          tooltip: 'Добавить',
+        ),
       ),
     );
   }

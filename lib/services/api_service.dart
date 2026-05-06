@@ -135,14 +135,21 @@ class ApiService {
   }
 
   // Folders API
+  
+  // ИСПРАВЛЕННЫЙ createFolder — обрабатывает folder_id как int ИЛИ String
   static Future<int?> createFolder(String token, String name, {int? parentId}) async {
     final response = await _post(token, '/create_folder.php', {
       'name': name,
       'parent_id': parentId,
     });
+    
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      return data['folder_id'];
+      // folder_id может прийти как int или как String
+      final folderId = data['folder_id'];
+      if (folderId is int) return folderId;
+      if (folderId is String) return int.tryParse(folderId);
+      return null;
     }
     return null;
   }
@@ -163,13 +170,50 @@ class ApiService {
     return response.statusCode == 200;
   }
 
+  // ИСПРАВЛЕННЫЙ getFolders — теперь получает ВСЕ папки рекурсивно
   static Future<List<dynamic>> getFolders(String token, {int? parentId}) async {
+    // Если parentId не указан — получаем плоский список ВСЕХ папок
+    if (parentId == null) {
+      // Получаем корневые папки
+      final rootFolders = await _fetchFoldersRaw(token, parentId: null);
+      List<dynamic> allFolders = List<dynamic>.from(rootFolders);
+      
+      // Рекурсивно собираем подпапки
+      for (final folder in rootFolders) {
+        final subFolders = await _fetchSubFolders(token, folder['id']);
+        allFolders.addAll(subFolders);
+      }
+      
+      return allFolders;
+    }
+    
+    // Если parentId указан — возвращаем только дочерние папки
+    return await _fetchFoldersRaw(token, parentId: parentId);
+  }
+
+  // Вспомогательный метод: рекурсивный сбор подпапок
+  static Future<List<dynamic>> _fetchSubFolders(String token, int parentId) async {
+    final folders = await _fetchFoldersRaw(token, parentId: parentId);
+    List<dynamic> result = [];
+    
+    for (final folder in folders) {
+      result.add(folder);
+      final subFolders = await _fetchSubFolders(token, folder['id']);
+      result.addAll(subFolders);
+    }
+    
+    return result;
+  }
+
+  // Базовый HTTP-запрос для получения папок
+  static Future<List<dynamic>> _fetchFoldersRaw(String token, {int? parentId}) async {
     Uri url;
     if (parentId != null) {
       url = Uri.parse('$_baseUrl/list_folders.php?parent_id=$parentId');
     } else {
       url = Uri.parse('$_baseUrl/list_folders.php');
     }
+    
     final request = http.Request('GET', url);
     request.headers['X-API-Token'] = token;
     request.headers['Host'] = _host;
@@ -178,7 +222,7 @@ class ApiService {
     
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      return data['folders'];
+      return data['folders'] ?? [];
     }
     return [];
   }
@@ -415,7 +459,6 @@ class ApiService {
       return false;
     }
   }
-
 
   static String thumbnailUrl(int fileId) => '$_baseUrl/download.php?id=$fileId&thumbnail=1';
 

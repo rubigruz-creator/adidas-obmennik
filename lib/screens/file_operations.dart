@@ -5,6 +5,7 @@ import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import '../services/api_service.dart';
 import '../widgets/file_icon.dart';
+import '../utils/format_file_size.dart';
 
 mixin FileOperations {
   String get token;
@@ -276,80 +277,198 @@ mixin FileOperations {
     final ownerId = file['user_id'];
     final canDelete = admin || ownerId == userId;
     final isPublic = file['is_public'] == 1;
+    final hasDescription = file['description'] != null && file['description'].toString().isNotEmpty;
 
     showModalBottomSheet(
       context: context,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(20, 20, 20, 90),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if ((this as dynamic).isImageType(file['file_type']))
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    height: 150, width: 200, color: Colors.grey.shade200,
-                    child: CachedNetworkImage(
-                      imageUrl: ApiService.thumbnailUrl(file['id']),
-                      httpHeaders: {'X-API-Token': token, 'Host': 'gazonbaza.ru'},
-                      fit: BoxFit.contain,
-                      placeholder: (context, url) => Center(child: CircularProgressIndicator()),
-                      errorWidget: (context, url, error) => FileIcon(fileType: file['file_type'] ?? '', size: 60),
+      isScrollControlled: true,
+      builder: (builderContext) {
+        final bottomInset = MediaQuery.of(builderContext).viewInsets.bottom;
+        return Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(20, 20, 20, 70 + bottomInset),
+            physics: AlwaysScrollableScrollPhysics(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Превью изображения или иконка
+                if ((this as dynamic).isImageType(file['file_type']))
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      height: 150,
+                      width: 200,
+                      color: Colors.grey.shade200,
+                      child: CachedNetworkImage(
+                        imageUrl: ApiService.thumbnailUrl(file['id']),
+                        httpHeaders: {
+                          'X-API-Token': token,
+                          'Host': 'gazonbaza.ru',
+                        },
+                        fit: BoxFit.contain,
+                        placeholder: (context, url) => Center(child: CircularProgressIndicator()),
+                        errorWidget: (context, url, error) => FileIcon(
+                          fileType: file['file_type'] ?? '',
+                          size: 60,
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  FileIcon(fileType: file['file_type'] ?? '', size: 60),
+                
+                SizedBox(height: 12),
+                
+                // Имя файла
+                Text(
+                  file['original_name'],
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                
+                // Описание (если есть)
+                if (hasDescription) ...[
+                  SizedBox(height: 8),
+                  Text(
+                    file['description'],
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.9)),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+                
+                SizedBox(height: 10),
+                
+                // Информация о файле
+                Text('Размер: ${file['file_size'] != null ? formatFileSize(file['file_size']) : 'неизвестно'}'),
+                Text('Тип: ${file['file_type']}'),
+                Text('Хозяин: ${file['owner_nickname']}'),
+                Text('Дата: ${file['upload_date']}'),
+                
+                SizedBox(height: 8),
+                
+                // Переключатель видимости
+                InkWell(
+                  onTap: () async {
+                    final success = await ApiService.toggleVisibility(token, file['id']);
+                    if (success && (this as dynamic).mounted) {
+                      Navigator.pop(context);
+                      (this as dynamic).loadContent();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(isPublic ? '🔒 Стал личным' : '🌍 Стал общим')),
+                      );
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isPublic ? Icons.public : Icons.lock,
+                          size: 18,
+                          color: isPublic ? Colors.green : Colors.orange,
+                        ),
+                        SizedBox(width: 6),
+                        Text(
+                          isPublic ? 'Общий файл (нажми сменить)' : 'Личный файл (нажми сменить)',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: isPublic ? Colors.green : Colors.orange,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              if (!(this as dynamic).isImageType(file['file_type']))
-                FileIcon(fileType: file['file_type'] ?? '', size: 60),
-              SizedBox(height: 12),
-              Text(file['original_name'], style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              if (file['description'] != null && file['description'].toString().isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Text(file['description'], maxLines: 3, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.9))),
-                ),
-              SizedBox(height: 10),
-              Text('Размер: ${file['file_size'] != null ? '${(file['file_size'] / 1048576).toStringAsFixed(1)} MB' : 'неизвестно'}'),
-              Text('Тип: ${file['file_type']}'),
-              Text('Хозяин: ${file['owner_nickname']}'),
-              Text('Дата: ${file['upload_date']}'),
-              SizedBox(height: 8),
-              InkWell(
-                onTap: () async {
-                  final success = await ApiService.toggleVisibility(token, file['id']);
-                  if (success && (this as dynamic).mounted) {
-                    Navigator.pop(context);
-                    (this as dynamic).loadContent();
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isPublic ? '🔒 Стал личным' : '🌍 Стал общим')));
-                  }
-                },
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 4, horizontal: 12),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(isPublic ? Icons.public : Icons.lock, size: 18, color: isPublic ? Colors.green : Colors.orange),
-                      SizedBox(width: 6),
-                      Text(isPublic ? 'Общий файл (нажми сменить)' : 'Личный файл (нажми сменить)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: isPublic ? Colors.green : Colors.orange)),
-                    ],
+                
+                SizedBox(height: 12),
+                
+                // Кнопки действий
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      downloadFile(file['id'], file['original_name'], file['file_type'] ?? '');
+                    },
+                    icon: Icon(Icons.download),
+                    label: Text('Скачать', style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    ),
                   ),
                 ),
-              ),
-              SizedBox(height: 12),
-              SizedBox(width: double.infinity, child: ElevatedButton.icon(onPressed: () { Navigator.pop(context); downloadFile(file['id'], file['original_name'], file['file_type'] ?? ''); }, icon: Icon(Icons.download), label: Text('Скачать', style: TextStyle(color: Colors.white)), style: ElevatedButton.styleFrom(foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))))),
-              SizedBox(height: 10),
-              SizedBox(width: double.infinity, child: ElevatedButton.icon(onPressed: () { Navigator.pop(context); renameFile(file); }, icon: Icon(Icons.edit, color: Colors.blue), label: Text('Переименовать', style: TextStyle(color: Colors.black)), style: ElevatedButton.styleFrom(foregroundColor: Colors.black, backgroundColor: Colors.blue.shade100, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))))),
-              SizedBox(height: 10),
-              SizedBox(width: double.infinity, child: ElevatedButton.icon(onPressed: () { Navigator.pop(context); moveFile(file); }, icon: Icon(Icons.drive_file_move, color: Colors.orange), label: Text('Переместить в папку', style: TextStyle(color: Colors.black)), style: ElevatedButton.styleFrom(foregroundColor: Colors.black, backgroundColor: Colors.orange.shade100, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))))),
-              if (canDelete) ...[
+                
                 SizedBox(height: 10),
-                SizedBox(width: double.infinity, child: ElevatedButton.icon(onPressed: () { Navigator.pop(context); deleteFile(file['id'], file['original_name'], ownerId); }, icon: Icon(Icons.delete, color: Colors.red), label: Text('Удалить', style: TextStyle(color: Colors.black)), style: ElevatedButton.styleFrom(foregroundColor: Colors.black, backgroundColor: Colors.red.shade100, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))))),
+                
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      renameFile(file);
+                    },
+                    icon: Icon(Icons.edit, color: Colors.blue),
+                    label: Text('Переименовать', style: TextStyle(color: Colors.black)),
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.black,
+                      backgroundColor: Colors.blue.shade100,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    ),
+                  ),
+                ),
+                
+                SizedBox(height: 10),
+                
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      moveFile(file);
+                    },
+                    icon: Icon(Icons.drive_file_move, color: Colors.orange),
+                    label: Text('Переместить в папку', style: TextStyle(color: Colors.black)),
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.black,
+                      backgroundColor: Colors.orange.shade100,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    ),
+                  ),
+                ),
+                
+                if (canDelete) ...[
+                  SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        deleteFile(file['id'], file['original_name'], ownerId);
+                      },
+                      icon: Icon(Icons.delete, color: Colors.red),
+                      label: Text('Удалить', style: TextStyle(color: Colors.black)),
+                      style: ElevatedButton.styleFrom(
+                        foregroundColor: Colors.black,
+                        backgroundColor: Colors.red.shade100,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                      ),
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
