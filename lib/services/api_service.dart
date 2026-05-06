@@ -56,7 +56,8 @@ class ApiService {
     return content['files'];
   }
 
-  static Future<bool> uploadFile(String token, File file, String fileName, {bool isPublic = false, int? folderId}) async {
+  static Future<bool> uploadFile(String token, File file, String fileName, {bool isPublic = false, int? folderId,
+  String? description,}) async {
     final url = Uri.parse('$_baseUrl/upload.php');
     final request = http.MultipartRequest('POST', url);
     request.headers['X-API-Token'] = token;
@@ -66,7 +67,9 @@ class ApiService {
     if (folderId != null) {
       request.fields['folder_id'] = folderId.toString();
     }
-    
+    if (description != null && description.isNotEmpty) {
+      request.fields['description'] = description;
+    }   
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
     return response.statusCode == 200;
@@ -412,4 +415,8 @@ class ApiService {
       return false;
     }
   }
+
+
+  static String thumbnailUrl(int fileId) => '$_baseUrl/download.php?id=$fileId&thumbnail=1';
+
 }

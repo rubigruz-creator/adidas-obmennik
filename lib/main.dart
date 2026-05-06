@@ -5,20 +5,15 @@ import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Инициализация сервиса уведомлений
+
   final notificationService = NotificationService();
   await notificationService.initialize();
   await notificationService.requestPermission();
-  
-  // Обработчик нажатия на уведомление
+
   NotificationService.onNotificationTap = (response) {
-    // Уведомление нажато — приложение откроется на LoginScreen,
-    // а после автологина (если токен есть) перейдёт в FilesScreen.
-    // payload содержит file_id и folder_id для будущей навигации.
     print('Notification tapped, payload: ${response.payload}');
   };
-  
+
   HttpOverrides.global = MyHttpOverrides();
   runApp(KusotschnitsaApp());
 }
@@ -36,8 +31,10 @@ class KusotschnitsaApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Кусочница',
-      theme: ThemeData.dark().copyWith(
-        colorScheme: ColorScheme.dark(primary: Colors.orange),
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        colorSchemeSeed: Colors.orange,
       ),
       home: LoginScreen(),
     );
