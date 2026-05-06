@@ -462,4 +462,20 @@ class ApiService {
 
   static String thumbnailUrl(int fileId) => '$_baseUrl/download.php?id=$fileId&thumbnail=1';
 
+  // Получение публичной ссылки для шеринга
+  static Future<String?> getShareLink(String token, int fileId) async {
+    final response = await _post(token, '/get_share_link.php', {'file_id': fileId});
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data['share_url'];
+    }
+    return null;
+}
+
+
+
+
+
+
+
 }

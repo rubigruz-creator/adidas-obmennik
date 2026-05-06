@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import '../services/api_service.dart';
 import '../widgets/file_icon.dart';
 import '../utils/format_file_size.dart';
+import 'package:share_plus/share_plus.dart';
 
 mixin FileOperations {
   String get token;
@@ -407,6 +408,26 @@ mixin FileOperations {
                   ),
                 ),
                 
+                // Поделиться
+                SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      shareFile(file);
+                    },
+                    icon: Icon(Icons.share, color: Colors.teal),
+                    label: Text('Поделиться', style: TextStyle(color: Colors.black)),
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.black,
+                      backgroundColor: Colors.teal.shade100,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    ),
+                  ),
+                ),  
+
+
                 SizedBox(height: 10),
                 
                 SizedBox(
@@ -471,4 +492,31 @@ mixin FileOperations {
       },
     );
   }
+
+  Future<void> shareFile(dynamic file) async {
+    final context = (this as dynamic).context as BuildContext;
+    try {
+      final shareUrl = await ApiService.getShareLink(token, file['id']);
+      if (shareUrl == null) {
+        if ((this as dynamic).mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('❌ Не удалось создать ссылку')),
+          );
+        }
+        return;
+      }
+      await Share.share(
+        'Посмотри файл "${file['original_name']}" в Кусочнице:\n$shareUrl',
+        subject: file['original_name'],
+      );
+    } catch (e) {
+      if ((this as dynamic).mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка при отправке: $e')),
+        );
+      }
+    }
+  }
+
+
 }
