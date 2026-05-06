@@ -18,6 +18,8 @@ dependencies:
   open_file: ^3.3.2
   shared_preferences: ^2.2.2    # ← для хранения токена
   cupertino_icons: ^1.0.8
+  socket_io_client: ^2.0.3
+  flutter_local_notifications: ^17.2.4
 
 dev_dependencies:
   flutter_test:

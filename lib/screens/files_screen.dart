@@ -9,6 +9,7 @@ import '../widgets/file_pill.dart';
 import '../widgets/folder_pill.dart';
 import 'login_screen.dart';
 import 'profile_screen.dart';
+import '../services/websocket_service.dart';
 
 class FilesScreen extends StatefulWidget {
   @override
@@ -553,6 +554,7 @@ class _FilesScreenState extends State<FilesScreen> {
   }
 
   Future<void> _logout() async {
+    WebSocketService().disconnect();
     await AuthService.logout();
     if (mounted) {
       Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => LoginScreen()));

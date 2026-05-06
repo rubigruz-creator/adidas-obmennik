@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import 'files_screen.dart';
+import '../services/websocket_service.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -34,10 +35,16 @@ class _LoginScreenState extends State<LoginScreen> {
           await AuthService.saveUserId(response['user']['id']);
           await AuthService.saveUserNickname(response['user']['nickname']);
           await AuthService.saveIsAdmin(response['user']['is_admin']);
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => FilesScreen()),
-          );
+
+            // Запускаем WebSocket для уведомлений
+            WebSocketService().connect(response['api_token']);
+
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => FilesScreen()),
+            );
+
+
         } else {
           _showError('Ошибка входа');
         }

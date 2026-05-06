@@ -81,15 +81,40 @@ class ApiService {
     final response = await http.Response.fromStream(streamedResponse);
     
     if (response.statusCode == 200) {
-      final directory = await getDownloadsDirectory();
-      if (directory != null) {
-        final file = File('${directory.path}/$fileName');
+      try {
+        // Сохраняем в общедоступную папку Downloads
+        final directory = Directory('/storage/emulated/0/Download');
+        if (!await directory.exists()) {
+          await directory.create(recursive: true);
+        }
+        
+        // Уникальное имя если файл уже существует
+        String filePath = '${directory.path}/$fileName';
+        int counter = 1;
+        while (await File(filePath).exists()) {
+          final dotIndex = fileName.lastIndexOf('.');
+          final baseName = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
+          final ext = dotIndex > 0 ? fileName.substring(dotIndex) : '';
+          filePath = '${directory.path}/${baseName}_$counter$ext';
+          counter++;
+        }
+        
+        final file = File(filePath);
         await file.writeAsBytes(response.bodyBytes);
         return true;
+      } catch (e) {
+        // Если нет доступа — сохраняем в папку приложения
+        final directory = await getDownloadsDirectory();
+        if (directory != null) {
+          final file = File('${directory.path}/$fileName');
+          await file.writeAsBytes(response.bodyBytes);
+          return true;
+        }
       }
     }
     return false;
   }
+
 
   static Future<bool> deleteFile(String token, int fileId) async {
     final response = await _post(token, '/delete.php', {'id': fileId});
@@ -344,32 +369,47 @@ class ApiService {
     final streamedResponse = await request.send();
     final contentLength = streamedResponse.contentLength;
     
-    final directory = await getDownloadsDirectory();
-    if (directory == null) return false;
-    
-    final file = File('${directory.path}/$fileName');
-    final sink = file.openWrite();
-    int receivedBytes = 0;
-    
-    await streamedResponse.stream.listen(
-      (chunk) {
-        receivedBytes += chunk.length;
-        sink.add(chunk);
-        if (contentLength != null) {
-          onProgress(receivedBytes / contentLength);
-        }
-      },
-      onDone: () async {
-        await sink.close();
+    try {
+      // Сохраняем в общедоступную папку Downloads
+      final directory = Directory('/storage/emulated/0/Download');
+      if (!await directory.exists()) {
+        await directory.create(recursive: true);
+      }
+      
+      final file = File('${directory.path}/$fileName');
+      final sink = file.openWrite();
+      int receivedBytes = 0;
+      
+      await streamedResponse.stream.listen(
+        (chunk) {
+          receivedBytes += chunk.length;
+          sink.add(chunk);
+          if (contentLength != null) {
+            onProgress(receivedBytes / contentLength);
+          }
+        },
+        onDone: () async {
+          await sink.close();
+          onProgress(1.0);
+        },
+        onError: (error) async {
+          await sink.close();
+          throw error;
+        },
+      ).asFuture();
+      
+      return true;
+    } catch (e) {
+      // Fallback
+      final directory = await getDownloadsDirectory();
+      if (directory != null) {
+        final file = File('${directory.path}/$fileName');
+        final bytes = await streamedResponse.stream.toList();
+        await file.writeAsBytes(bytes.expand((x) => x).toList());
         onProgress(1.0);
-      },
-      onError: (error) async {
-        await sink.close();
-        throw error;
-      },
-    ).asFuture();
-    
-    return true;
+        return true;
+      }
+      return false;
+    }
   }
-
 }
