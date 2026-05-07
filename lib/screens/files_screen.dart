@@ -41,7 +41,8 @@ class _FilesScreenState extends State<FilesScreen>
   ViewMode viewMode = ViewMode.grid;
   String sortBy = 'date';
   bool sortAsc = false;
-  Set<String> typeFilters = {};
+  Set<String> typeFilters = {};         // фильтры по типу (image, pdf, ...)
+  Set<String> attributeFilters = {};    // 'mine', 'others', 'new', 'viewed'
 
   Timer? debounceTimer;
 
@@ -141,69 +142,26 @@ class _FilesScreenState extends State<FilesScreen>
     }
   }
 
-
   Future<void> _loadFolderPath() async {
-    try {
-      // Загружаем ВСЕ папки одним запросом
-      final allFolders = await ApiService.getFolders(apiToken);
-      
-      List<Map<String, dynamic>> path = [];
-      int? id = currentFolderId;
-      
-      // Строим цепочку от текущей папки до самого корня
-      while (id != null) {
-        // Ищем папку в общем списке
-        Map<String, dynamic>? folder;
-        try {
-          folder = allFolders.firstWhere(
-            (f) => f['id'] == id,
-          );
-        } catch (_) {
-          folder = null;
-        }
-        
-        if (folder == null) {
-          debugPrint('⚠️ Папка с id=$id не найдена в allFolders');
-          break;
-        }
-        
-        // Вставляем в начало пути
-        path.insert(0, {
-          'id': folder['id'],
-          'name': folder['name'],
-        });
-        
-        // Поднимаемся к родительской папке
-        id = folder['parent_id'];
-      }
-      
-      if (mounted) {
-        setState(() {
-          folderPath = path;
-        });
-        debugPrint('📁 Путь папок: Главная → ${path.map((e) => e['name']).join(' → ')}');
-      }
-    } catch (e) {
-      debugPrint('❌ Ошибка загрузки пути папок: $e');
-      if (mounted) {
-        setState(() => folderPath = []);
-      }
+    final allFolders = await ApiService.getFolders(apiToken);
+    List<Map<String, dynamic>> path = [];
+    int? id = currentFolderId;
+    while (id != null) {
+      final folder = allFolders.firstWhere((f) => f['id'] == id, orElse: () => null);
+      if (folder == null) break;
+      path.insert(0, {'id': folder['id'], 'name': folder['name']});
+      id = folder['parent_id'];
     }
+    if (mounted) setState(() => folderPath = path);
   }
 
-
-
-
-  /// Возврат к родительской папке или в корень
   void _goToParentFolder() {
     if (folderPath.length > 1) {
-      // Есть родительская папка
       final parentFolder = folderPath[folderPath.length - 2];
       setState(() {
         currentFolderId = parentFolder['id'];
       });
     } else {
-      // Возврат в корень
       setState(() {
         currentFolderId = null;
         folderPath = [];
@@ -212,19 +170,18 @@ class _FilesScreenState extends State<FilesScreen>
     loadContent();
   }
 
-  /// Обработка системной кнопки "Назад"
   Future<bool> _onWillPop() async {
     if (currentFolderId != null) {
-      // Если мы в подпапке, возвращаемся на уровень выше
       _goToParentFolder();
-      return false; // Не выходим из приложения
+      return false;
     }
-    // В корне — стандартное поведение (выход/сворачивание)
     return true;
   }
 
   List<dynamic> _applyFiltersAndSorting(List<dynamic> fileList) {
     List<dynamic> result = fileList;
+
+    // 1. Фильтр по типу (старый)
     if (typeFilters.isNotEmpty) {
       result = result.where((f) {
         final type = (f['file_type'] ?? '').toLowerCase();
@@ -265,9 +222,23 @@ class _FilesScreenState extends State<FilesScreen>
         return false;
       }).toList();
     }
+
+    // 2. Атрибутные фильтры (владелец, новизна)
+    if (attributeFilters.contains('mine')) {
+      result = result.where((f) => f['user_id'] == currentUserId).toList();
+    }
+    if (attributeFilters.contains('others')) {
+      result = result.where((f) => f['user_id'] != currentUserId).toList();
+    }
+    if (attributeFilters.contains('new')) {
+      result = result.where((f) => f['is_new'] == true).toList();
+    }
+    if (attributeFilters.contains('viewed')) {
+      result = result.where((f) => f['is_new'] == false).toList();
+    }
+
     return _applySorting(result);
   }
-
 
   List<dynamic> _applySorting(List<dynamic> items) {
     List<dynamic> sorted = List.from(items);
@@ -283,23 +254,17 @@ class _FilesScreenState extends State<FilesScreen>
             : (b['file_size'] ?? 0).compareTo(a['file_size'] ?? 0));
         break;
       case 'owner':
-        // Сортировка по хозяину (owner_nickname), если нет - по owner_id
         sorted.sort((a, b) {
           final aOwner = (a['owner_nickname'] ?? 'яяя').toString().toLowerCase();
           final bOwner = (b['owner_nickname'] ?? 'яяя').toString().toLowerCase();
-          return sortAsc 
-              ? aOwner.compareTo(bOwner) 
-              : bOwner.compareTo(aOwner);
+          return sortAsc ? aOwner.compareTo(bOwner) : bOwner.compareTo(aOwner);
         });
         break;
       case 'visibility':
-        // Сортировка по типу: сначала общие (1), потом личные (0)
         sorted.sort((a, b) {
           final aPublic = a['is_public'] == 1 ? 1 : 0;
           final bPublic = b['is_public'] == 1 ? 1 : 0;
-          return sortAsc 
-              ? aPublic.compareTo(bPublic) 
-              : bPublic.compareTo(aPublic);
+          return sortAsc ? aPublic.compareTo(bPublic) : bPublic.compareTo(aPublic);
         });
         break;
       case 'date':
@@ -311,7 +276,6 @@ class _FilesScreenState extends State<FilesScreen>
     }
     return sorted;
   }
-
 
   Future<void> logout() async {
     WebSocketService().disconnect();
@@ -334,56 +298,15 @@ class _FilesScreenState extends State<FilesScreen>
       builder: (context) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ListTile(
-            title: Text('По дате'), 
-            leading: Icon(Icons.date_range), 
-            onTap: () { 
-              setState(() { sortBy = 'date'; sortAsc = false; }); 
-              loadContent(); 
-              Navigator.pop(context); 
-            },
-          ),
-          ListTile(
-            title: Text('По имени'), 
-            leading: Icon(Icons.sort_by_alpha), 
-            onTap: () { 
-              setState(() { sortBy = 'name'; sortAsc = true; }); 
-              loadContent(); 
-              Navigator.pop(context); 
-            },
-          ),
-          ListTile(
-            title: Text('По размеру'), 
-            leading: Icon(Icons.data_usage), 
-            onTap: () { 
-              setState(() { sortBy = 'size'; sortAsc = false; }); 
-              loadContent(); 
-              Navigator.pop(context); 
-            },
-          ),
-          ListTile(
-            title: Text('По хозяину'), 
-            leading: Icon(Icons.person), 
-            onTap: () { 
-              setState(() { sortBy = 'owner'; sortAsc = true; }); // А-Я
-              loadContent(); 
-              Navigator.pop(context); 
-            },
-          ),
-          ListTile(
-            title: Text('По типу (Общий/Личный)'), 
-            leading: Icon(Icons.visibility), 
-            onTap: () { 
-              setState(() { sortBy = 'visibility'; sortAsc = false; }); // Общие сверху
-              loadContent(); 
-              Navigator.pop(context); 
-            },
-          ),
+          ListTile(title: Text('По дате'), leading: Icon(Icons.date_range), onTap: () { setState(() { sortBy = 'date'; sortAsc = false; }); loadContent(); Navigator.pop(context); }),
+          ListTile(title: Text('По имени'), leading: Icon(Icons.sort_by_alpha), onTap: () { setState(() { sortBy = 'name'; sortAsc = true; }); loadContent(); Navigator.pop(context); }),
+          ListTile(title: Text('По размеру'), leading: Icon(Icons.data_usage), onTap: () { setState(() { sortBy = 'size'; sortAsc = false; }); loadContent(); Navigator.pop(context); }),
+          ListTile(title: Text('По хозяину'), leading: Icon(Icons.person), onTap: () { setState(() { sortBy = 'owner'; sortAsc = true; }); loadContent(); Navigator.pop(context); }),
+          ListTile(title: Text('По типу (Общий/Личный)'), leading: Icon(Icons.visibility), onTap: () { setState(() { sortBy = 'visibility'; sortAsc = false; }); loadContent(); Navigator.pop(context); }),
         ],
       ),
     );
   }
-
 
   void showFABMenu() {
     showModalBottomSheet(
@@ -409,142 +332,211 @@ class _FilesScreenState extends State<FilesScreen>
     return t.contains('jpg') || t.contains('jpeg') || t.contains('png') || t.contains('webp') || t.contains('gif') || t.contains('bmp');
   }
 
-@override
-Widget build(BuildContext context) {
-  final theme = Theme.of(context);
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
 
-  return PopScope(
-    canPop: currentFolderId == null,
-    onPopInvokedWithResult: (didPop, result) async {
-      if (!didPop && currentFolderId != null) {
-        _goToParentFolder();
-      }
-    },
-    child: Scaffold(
-      appBar: AppBar(
-        leading: currentFolderId != null
-            ? IconButton(
-                icon: Icon(Icons.arrow_back),
-                onPressed: _goToParentFolder,
-                tooltip: 'Назад',
-              )
-            : null,
-        title: isSearching
-            ? TextField(
-                controller: _searchController,
-                autofocus: true,
-                style: TextStyle(color: theme.colorScheme.onPrimary),
-                decoration: InputDecoration(
-                  hintText: 'Поиск файлов...',
-                  hintStyle: TextStyle(color: theme.colorScheme.onPrimary.withOpacity(0.5)),
-                  border: InputBorder.none,
-                ),
-                onChanged: (value) {
-                  debounceTimer?.cancel();
-                  debounceTimer = Timer(Duration(milliseconds: 300), () {
-                    setState(() => _searchQuery = value);
-                    loadContent();
-                  });
-                },
-              )
-            : (folderPath.isEmpty
-                ? Text('🍖 Кусочница')
-                : Text(folderPath.last['name'])),
-        actions: [
-          IconButton(
-            icon: Icon(isSearching ? Icons.close : Icons.search),
-            onPressed: () {
-              setState(() {
-                if (isSearching) {
-                  isSearching = false;
-                  _searchController.clear();
-                  _searchQuery = '';
-                  loadContent();
-                } else {
-                  isSearching = true;
-                  _searchQuery = '';
-                }
-              });
-            },
-          ),
-          if (!isSearching) ...[
-            IconButton(icon: Icon(viewMode == ViewMode.grid ? Icons.list : Icons.grid_view), onPressed: toggleViewMode, tooltip: viewMode == ViewMode.grid ? 'Список' : 'Сетка'),
-            IconButton(icon: Icon(Icons.sort), onPressed: showSortMenu, tooltip: 'Сортировка'),
-            IconButton(icon: Icon(Icons.person), onPressed: () async {
-              final needRefresh = await Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(apiToken: apiToken)));
-              if (needRefresh == true && mounted) await loadContent();
-            }, tooltip: 'Профиль'),
-            IconButton(icon: Icon(Icons.logout), onPressed: logout),
-          ],
-        ],
-      ),
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              if (folderPath.isNotEmpty)
-                BreadcrumbChips(path: folderPath, onSelected: (folderId, index) { setState(() => currentFolderId = folderId); loadContent(); }),
-              if (isSearching)
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  child: Wrap(
-                    spacing: 6,
-                    children: ['Все', 'image', 'pdf', 'doc', 'xls', 'archive', 'audio', 'video', 'text', 'code', 'apk'].map((type) {
-                      final selected = type == 'Все' ? typeFilters.isEmpty : typeFilters.contains(type);
-                      return FilterChip(
-                        label: Text(type == 'Все' ? 'Все' : type),
-                        selected: selected,
-                        onSelected: (val) {
-                          setState(() {
-                            if (type == 'Все') { typeFilters.clear(); } else { if (val) typeFilters.add(type); else typeFilters.remove(type); }
-                          });
-                          loadContent();
-                        },
-                      );
-                    }).toList(),
+    return PopScope(
+      canPop: currentFolderId == null,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (!didPop && currentFolderId != null) {
+          _goToParentFolder();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: currentFolderId != null
+              ? IconButton(
+                  icon: Icon(Icons.arrow_back),
+                  onPressed: _goToParentFolder,
+                  tooltip: 'Назад',
+                )
+              : null,
+          title: isSearching
+              ? TextField(
+                  controller: _searchController,
+                  autofocus: true,
+                  style: TextStyle(color: theme.colorScheme.onPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'Поиск файлов...',
+                    hintStyle: TextStyle(color: theme.colorScheme.onPrimary.withOpacity(0.5)),
+                    border: InputBorder.none,
                   ),
-                ),
-              Expanded(
-                child: isLoading
-                    ? Center(child: CircularProgressIndicator())
-                    : folders.isEmpty && files.isEmpty
-                        ? EmptyState()
-                        : RefreshIndicator(
-                            onRefresh: loadContent,
-                            child: AnimatedSwitcher(
-                              duration: Duration(milliseconds: 300),
-                              child: viewMode == ViewMode.grid ? buildGridView() : buildListView(),
-                            ),
-                          ),
-              ),
-            ],
-          ),
-          // Кнопка камеры в левом нижнем углу
-          Positioned(
-            left: 16,
-            bottom: 42,
-            child: FloatingActionButton(
-              heroTag: 'camera',
-              onPressed: takePhoto,
-              backgroundColor: Colors.blue, // Ярко-синий, как у иконок изображений
-              foregroundColor: Colors.white,
-              child: Icon(Icons.camera_alt),
+                  onChanged: (value) {
+                    debounceTimer?.cancel();
+                    debounceTimer = Timer(Duration(milliseconds: 300), () {
+                      setState(() => _searchQuery = value);
+                      loadContent();
+                    });
+                  },
+                )
+              : (folderPath.isEmpty
+                  ? Text('🍖 Кусочница')
+                  : Text(folderPath.last['name'])),
+          actions: [
+            IconButton(
+              icon: Icon(isSearching ? Icons.close : Icons.search),
+              onPressed: () {
+                setState(() {
+                  if (isSearching) {
+                    isSearching = false;
+                    _searchController.clear();
+                    _searchQuery = '';
+                    typeFilters.clear();
+                    attributeFilters.clear();   // сбрасываем атрибутные фильтры
+                    loadContent();
+                  } else {
+                    isSearching = true;
+                    _searchQuery = '';
+                  }
+                });
+              },
             ),
-          ),
-          // Основной FAB в правом нижнем углу — через стандартный расположение
-        ],
+            if (!isSearching) ...[
+              IconButton(icon: Icon(viewMode == ViewMode.grid ? Icons.list : Icons.grid_view), onPressed: toggleViewMode, tooltip: viewMode == ViewMode.grid ? 'Список' : 'Сетка'),
+              IconButton(icon: Icon(Icons.sort), onPressed: showSortMenu, tooltip: 'Сортировка'),
+              IconButton(icon: Icon(Icons.person), onPressed: () async {
+                final needRefresh = await Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(apiToken: apiToken)));
+                if (needRefresh == true && mounted) await loadContent();
+              }, tooltip: 'Профиль'),
+              IconButton(icon: Icon(Icons.logout), onPressed: logout),
+            ],
+          ],
+        ),
+        body: Stack(
+          children: [
+            Column(
+              children: [
+                if (folderPath.isNotEmpty)
+                  BreadcrumbChips(path: folderPath, onSelected: (folderId, index) { setState(() => currentFolderId = folderId); loadContent(); }),
+                if (isSearching) ...[
+                  // Первая строка: фильтры по типу
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    child: Wrap(
+                      spacing: 6,
+                      children: ['Все', 'image', 'pdf', 'doc', 'xls', 'archive', 'audio', 'video', 'text', 'code', 'apk'].map((type) {
+                        final selected = type == 'Все' ? typeFilters.isEmpty : typeFilters.contains(type);
+                        return FilterChip(
+                          label: Text(type == 'Все' ? 'Все' : type),
+                          selected: selected,
+                          onSelected: (val) {
+                            setState(() {
+                              if (type == 'Все') { typeFilters.clear(); } else { if (val) typeFilters.add(type); else typeFilters.remove(type); }
+                            });
+                            loadContent();
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  // Вторая строка: атрибутные фильтры
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                    child: Wrap(
+                      spacing: 6,
+                      children: [
+                        FilterChip(
+                          label: Text('Свои'),
+                          selected: attributeFilters.contains('mine'),
+                          onSelected: (val) {
+                            setState(() {
+                              if (val) {
+                                attributeFilters.add('mine');
+                                attributeFilters.remove('others'); // взаимоисключение
+                              } else {
+                                attributeFilters.remove('mine');
+                              }
+                            });
+                            loadContent();
+                          },
+                        ),
+                        FilterChip(
+                          label: Text('Чужие'),
+                          selected: attributeFilters.contains('others'),
+                          onSelected: (val) {
+                            setState(() {
+                              if (val) {
+                                attributeFilters.add('others');
+                                attributeFilters.remove('mine');
+                              } else {
+                                attributeFilters.remove('others');
+                              }
+                            });
+                            loadContent();
+                          },
+                        ),
+                        FilterChip(
+                          label: Text('Новые'),
+                          selected: attributeFilters.contains('new'),
+                          onSelected: (val) {
+                            setState(() {
+                              if (val) {
+                                attributeFilters.add('new');
+                                attributeFilters.remove('viewed');
+                              } else {
+                                attributeFilters.remove('new');
+                              }
+                            });
+                            loadContent();
+                          },
+                        ),
+                        FilterChip(
+                          label: Text('Просмотренные'),
+                          selected: attributeFilters.contains('viewed'),
+                          onSelected: (val) {
+                            setState(() {
+                              if (val) {
+                                attributeFilters.add('viewed');
+                                attributeFilters.remove('new');
+                              } else {
+                                attributeFilters.remove('viewed');
+                              }
+                            });
+                            loadContent();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                Expanded(
+                  child: isLoading
+                      ? Center(child: CircularProgressIndicator())
+                      : folders.isEmpty && files.isEmpty
+                          ? EmptyState()
+                          : RefreshIndicator(
+                              onRefresh: loadContent,
+                              child: AnimatedSwitcher(
+                                duration: Duration(milliseconds: 300),
+                                child: viewMode == ViewMode.grid ? buildGridView() : buildListView(),
+                              ),
+                            ),
+                ),
+              ],
+            ),
+            // Кнопка камеры в левом нижнем углу
+            Positioned(
+              left: 16,
+              bottom: 46,
+              child: FloatingActionButton(
+                heroTag: 'camera',
+                onPressed: takePhoto,
+                backgroundColor: Colors.blue,
+                child: Icon(Icons.camera_alt),
+              ),
+            ),
+          ],
+        ),
+        floatingActionButton: FloatingActionButton(
+          heroTag: 'main',
+          onPressed: showFABMenu,
+          child: Icon(Icons.add),
+          tooltip: 'Добавить',
+        ),
       ),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'main',
-        onPressed: showFABMenu,
-        backgroundColor: const Color.fromARGB(255, 255, 102, 0),  // любой цвет, например зелёный
-        foregroundColor: Colors.white,  // цвет иконки
-        child: Icon(Icons.add),
-        tooltip: 'Добавить',
-      ),
-    ),
-  );
-}
+    );
+  }
 
   Widget buildGridView() {
     return GridView.builder(
