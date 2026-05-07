@@ -17,63 +17,32 @@ class FileListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isPublic = file['is_public'] == 1;
-    final size = formatFileSize(file['file_size'] ?? 0);
-    final date = formatRelativeDate(file['upload_date'] ?? '');
-    final owner = file['owner_nickname'] ?? '';
-
-    return Card(
-      elevation: 1,
-      margin: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        onLongPress: onLongPress,
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              FileIcon(fileType: file['file_type'] ?? '', size: 36),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      file['original_name'] ?? 'Без имени',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Text(size, style: TextStyle(fontSize: 13, color: Colors.grey)),
-                        SizedBox(width: 12),
-                        Icon(
-                          isPublic ? Icons.public : Icons.lock,
-                          size: 14,
-                          color: isPublic ? Colors.green : Colors.orange,
-                        ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            '$owner • $date',
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+    final isNew = file['is_new'] == true;
+    return ListTile(
+      leading: Stack(
+        children: [
+          FileIcon(fileType: file['file_type'] ?? '', size: 40),
+          if (isNew)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: Colors.green,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1.5),
                 ),
               ),
-              Icon(Icons.chevron_right, color: Colors.grey),
-            ],
-          ),
-        ),
+            ),
+        ],
       ),
+      title: Text(file['original_name'] ?? 'Без имени', maxLines: 1, overflow: TextOverflow.ellipsis),
+      subtitle: Text(formatFileSize(file['file_size'] ?? 0)),
+      trailing: Text(formatRelativeDate(file['upload_date'] ?? '')),
+      onTap: onTap,
+      onLongPress: onLongPress,
     );
   }
 }

@@ -275,6 +275,13 @@ mixin FileOperations {
 
   void showFileMenu(dynamic file) {
     final context = (this as dynamic).context as BuildContext;
+    // Помечаем файл как просмотренный (без ожидания, чтобы меню открылось мгновенно)
+    ApiService.markFileViewed(token, file['id']).then((_) {
+      if ((this as dynamic).mounted) {
+        (this as dynamic).loadContent(); // обновим список, чтобы убрать бейдж
+      }
+    });
+
     final ownerId = file['user_id'];
     final canDelete = admin || ownerId == userId;
     final isPublic = file['is_public'] == 1;

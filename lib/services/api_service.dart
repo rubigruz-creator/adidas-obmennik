@@ -470,9 +470,12 @@ class ApiService {
       return data['share_url'];
     }
     return null;
-}
+  }
 
-
+  static Future<bool> markFileViewed(String token, int fileId) async {
+    final response = await _post(token, '/mark_viewed.php', {'file_id': fileId});
+    return response.statusCode == 200;
+  }
 
 
 
