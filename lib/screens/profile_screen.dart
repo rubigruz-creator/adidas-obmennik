@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 
@@ -21,10 +24,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _fullNameController = TextEditingController();
   final _positionController = TextEditingController();
 
+  final _storage = const FlutterSecureStorage();
+  String? _currentPinHash;
+
   @override
   void initState() {
     super.initState();
     _loadProfile();
+    _loadPinStatus();
   }
 
   @override
@@ -33,6 +40,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _fullNameController.dispose();
     _positionController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadPinStatus() async {
+    _currentPinHash = await _storage.read(key: 'pin_hash');
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadProfile() async {
@@ -48,9 +60,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       });
     } catch (e) {
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка загрузки профиля: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка загрузки профиля: $e')),
+        );
+      }
     }
   }
 
@@ -72,7 +86,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     
     if (updates.isEmpty) {
       setState(() => _isSaving = false);
-      Navigator.pop(context, false); // Не обновлять главный экран
+      if (mounted) Navigator.pop(context, false);
       return;
     }
     
@@ -84,21 +98,172 @@ class _ProfileScreenState extends State<ProfileScreen> {
         position: updates['position'],
       );
       
-      // Обновляем сохранённые данные в SharedPreferences
       if (updatedProfile['nickname'] != null) {
         await AuthService.saveUserNickname(updatedProfile['nickname']);
       }
       
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('✅ Профиль обновлён')),
+        const SnackBar(content: Text('✅ Профиль обновлён')),
       );
-      Navigator.pop(context, true); // Нужно обновить главный экран
+      Navigator.pop(context, true);
     } catch (e) {
       setState(() => _isSaving = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка сохранения: $e')),
+        );
+      }
+    }
+  }
+
+  // Диалог установки/изменения PIN-кода
+  void _showPinDialog({bool changing = false}) async {
+    final oldPinController = TextEditingController();
+    final newPinController = TextEditingController();
+    final confirmController = TextEditingController();
+
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(changing ? 'Изменить PIN-код' : 'Установить PIN-код'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (changing && _currentPinHash != null)
+                TextField(
+                  controller: oldPinController,
+                  obscureText: true,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  decoration: const InputDecoration(
+                    labelText: 'Текущий PIN',
+                    hintText: 'Введите текущий PIN',
+                  ),
+                ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: newPinController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: InputDecoration(
+                  labelText: changing ? 'Новый PIN' : 'PIN-код',
+                  hintText: 'От 4 до 6 цифр',
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: confirmController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                decoration: const InputDecoration(
+                  labelText: 'Подтверждение',
+                  hintText: 'Повторите PIN-код',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context, {
+                'old': oldPinController.text,
+                'new': newPinController.text,
+                'confirm': confirmController.text,
+              });
+            },
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == null) return;
+
+    final newPin = result['new'] ?? '';
+    final confirm = result['confirm'] ?? '';
+    final oldPin = result['old'] ?? '';
+
+    // Валидация
+    if (newPin.length < 4 || newPin.length > 6) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('PIN должен содержать от 4 до 6 цифр')),
+        );
+      }
+      return;
+    }
+
+    if (newPin != confirm) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('PIN-коды не совпадают')),
+        );
+      }
+      return;
+    }
+
+    // Проверка старого PIN при изменении
+    if (changing && _currentPinHash != null) {
+      final oldHash = sha256.convert(utf8.encode(oldPin)).toString();
+      if (oldHash != _currentPinHash) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Неверный текущий PIN')),
+          );
+        }
+        return;
+      }
+    }
+
+    // Сохраняем хеш нового PIN
+    final newHash = sha256.convert(utf8.encode(newPin)).toString();
+    await _storage.write(key: 'pin_hash', value: newHash);
+    setState(() => _currentPinHash = newHash);
+    
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка сохранения: $e')),
+        SnackBar(content: Text(changing ? '✅ PIN-код изменён' : '✅ PIN-код установлен')),
       );
+    }
+  }
+
+  // Удаление PIN-кода
+  Future<void> _deletePin() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Удалить PIN-код?'),
+        content: const Text('Приложение больше не будет запрашивать PIN при возврате из фона.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _storage.delete(key: 'pin_hash');
+      setState(() => _currentPinHash = null);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('✅ PIN-код удалён')),
+        );
+      }
     }
   }
 
@@ -106,29 +271,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Мой профиль'),
+        title: const Text('Мой профиль'),
         centerTitle: true,
         actions: [
           if (!_isLoading && !_isSaving)
             IconButton(
-              icon: Icon(Icons.save),
+              icon: const Icon(Icons.save),
               onPressed: _saveProfile,
+              tooltip: 'Сохранить',
             ),
         ],
       ),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: EdgeInsets.all(16),
+              padding: const EdgeInsets.all(16),
               child: Form(
                 key: _formKey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Карточка профиля
                     Card(
                       elevation: 2,
                       child: Padding(
-                        padding: EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -136,21 +303,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               'Телефон',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Colors.grey[600],
+                                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                               ),
                             ),
-                            SizedBox(height: 4),
+                            const SizedBox(height: 4),
                             Text(
                               _profile['phone'] ?? '',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,
+                                color: Theme.of(context).colorScheme.onSurface,
                               ),
                             ),
-                            Divider(height: 24),
+                            const Divider(height: 24),
                             TextFormField(
                               controller: _nicknameController,
-                              decoration: InputDecoration(
+                              decoration: const InputDecoration(
                                 labelText: 'Никнейм',
                                 hintText: 'Как вас будут видеть другие',
                                 prefixIcon: Icon(Icons.person_outline),
@@ -168,28 +336,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 return null;
                               },
                             ),
-                            SizedBox(height: 16),
+                            const SizedBox(height: 16),
                             TextFormField(
                               controller: _fullNameController,
-                              decoration: InputDecoration(
+                              decoration: const InputDecoration(
                                 labelText: 'Полное имя',
                                 hintText: 'Иван Иванов',
                                 prefixIcon: Icon(Icons.badge_outlined),
                               ),
                             ),
-                            SizedBox(height: 16),
+                            const SizedBox(height: 16),
                             TextFormField(
                               controller: _positionController,
-                              decoration: InputDecoration(
+                              decoration: const InputDecoration(
                                 labelText: 'Должность',
                                 hintText: 'Менеджер проектов',
                                 prefixIcon: Icon(Icons.work_outline),
                               ),
                             ),
                             if (_profile['is_admin'] == 1) ...[
-                              SizedBox(height: 16),
+                              const SizedBox(height: 16),
                               Container(
-                                padding: EdgeInsets.all(12),
+                                padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
                                   color: Colors.amber.shade50,
                                   borderRadius: BorderRadius.circular(8),
@@ -198,7 +366,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 child: Row(
                                   children: [
                                     Icon(Icons.admin_panel_settings, color: Colors.amber[800]),
-                                    SizedBox(width: 12),
+                                    const SizedBox(width: 12),
                                     Expanded(
                                       child: Text(
                                         'У вас права администратора',
@@ -216,18 +384,72 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                     ),
-                    SizedBox(height: 24),
+
+                    const SizedBox(height: 24),
+
+                    // Блок безопасности: PIN-код
+                    Card(
+                      elevation: 2,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Безопасность',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            if (_currentPinHash == null)
+                              ListTile(
+                                leading: const Icon(Icons.lock_outline),
+                                title: const Text('Установить PIN-код'),
+                                subtitle: const Text('Дополнительная защита при возврате в приложение'),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                onTap: () => _showPinDialog(),
+                              )
+                            else ...[
+                              ListTile(
+                                leading: const Icon(Icons.lock),
+                                title: const Text('Изменить PIN-код'),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                onTap: () => _showPinDialog(changing: true),
+                              ),
+                              ListTile(
+                                leading: const Icon(Icons.lock_open),
+                                title: const Text('Удалить PIN-код'),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                onTap: _deletePin,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Кнопка сохранения
                     if (_isSaving)
-                      Center(child: CircularProgressIndicator())
+                      const Center(child: CircularProgressIndicator())
                     else
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: _saveProfile,
-                          icon: Icon(Icons.save),
-                          label: Text('Сохранить изменения'),
+                          icon: const Icon(Icons.save),
+                          label: const Text('Сохранить изменения'),
                           style: ElevatedButton.styleFrom(
-                            padding: EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
                         ),
                       ),

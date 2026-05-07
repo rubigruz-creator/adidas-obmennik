@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../services/websocket_service.dart';
@@ -15,6 +16,7 @@ import 'profile_screen.dart';
 import 'file_operations.dart';
 import 'folder_operations.dart';
 import 'upload_operations.dart';
+import '../utils/app_config.dart';
 
 enum ViewMode { grid, list }
 
@@ -41,8 +43,8 @@ class _FilesScreenState extends State<FilesScreen>
   ViewMode viewMode = ViewMode.grid;
   String sortBy = 'date';
   bool sortAsc = false;
-  Set<String> typeFilters = {};         // фильтры по типу (image, pdf, ...)
-  Set<String> attributeFilters = {};    // 'mine', 'others', 'new', 'viewed'
+  Set<String> typeFilters = {};
+  Set<String> attributeFilters = {};
 
   Timer? debounceTimer;
 
@@ -344,65 +346,105 @@ class _FilesScreenState extends State<FilesScreen>
         }
       },
       child: Scaffold(
-        appBar: AppBar(
-          leading: currentFolderId != null
-              ? IconButton(
-                  icon: Icon(Icons.arrow_back),
-                  onPressed: _goToParentFolder,
-                  tooltip: 'Назад',
-                )
-              : null,
-          title: isSearching
-              ? TextField(
-                  controller: _searchController,
-                  autofocus: true,
-                  style: TextStyle(color: theme.colorScheme.onPrimary),
-                  decoration: InputDecoration(
-                    hintText: 'Поиск файлов...',
-                    hintStyle: TextStyle(color: theme.colorScheme.onPrimary.withOpacity(0.5)),
-                    border: InputBorder.none,
-                  ),
-                  onChanged: (value) {
-                    debounceTimer?.cancel();
-                    debounceTimer = Timer(Duration(milliseconds: 300), () {
-                      setState(() => _searchQuery = value);
-                      loadContent();
-                    });
-                  },
-                )
-              : (folderPath.isEmpty
-                  ? Text('🍖 Кусочница')
-                  : Text(folderPath.last['name'])),
-          actions: [
+
+appBar: AppBar(
+  leading: currentFolderId != null
+      ? IconButton(
+          icon: Icon(Icons.arrow_back),
+          onPressed: _goToParentFolder,
+          tooltip: 'Назад',
+        )
+      : (isSearching
+          ? null
+          : Padding(
+              padding: const EdgeInsets.all(12),
+              child: SvgPicture.asset(
+                'assets/logo/adidas_logo.svg',
+                width: 32,
+                height: 32,
+                colorFilter: ColorFilter.mode(
+                  theme.colorScheme.onPrimary,
+                  BlendMode.srcIn,
+                ),
+              ),
+            )),
+  title: isSearching
+      ? TextField(
+          controller: _searchController,
+          autofocus: true,
+          style: TextStyle(color: theme.colorScheme.onPrimary),
+          decoration: InputDecoration(
+            hintText: 'Поиск файлов...',
+            hintStyle: TextStyle(color: theme.colorScheme.onPrimary.withOpacity(0.5)),
+            border: InputBorder.none,
+          ),
+          onChanged: (value) {
+            debounceTimer?.cancel();
+            debounceTimer = Timer(Duration(milliseconds: 300), () {
+              setState(() => _searchQuery = value);
+              loadContent();
+            });
+          },
+        )
+      : (folderPath.isEmpty
+          ? null
+          : Text(folderPath.last['name'])),
+  actions: [    
+
+
+
+          // Кнопка поиска/закрытия поиска
+          IconButton(
+            icon: Icon(isSearching ? Icons.close : Icons.search),
+            onPressed: () {
+              setState(() {
+                if (isSearching) {
+                  isSearching = false;
+                  _searchController.clear();
+                  _searchQuery = '';
+                  typeFilters.clear();
+                  attributeFilters.clear();
+                  loadContent();
+                } else {
+                  isSearching = true;
+                  _searchQuery = '';
+                }
+              });
+            },
+          ),
+          // Остальные кнопки видны только когда поиск НЕ активен
+          if (!isSearching) ...[
             IconButton(
-              icon: Icon(isSearching ? Icons.close : Icons.search),
-              onPressed: () {
-                setState(() {
-                  if (isSearching) {
-                    isSearching = false;
-                    _searchController.clear();
-                    _searchQuery = '';
-                    typeFilters.clear();
-                    attributeFilters.clear();   // сбрасываем атрибутные фильтры
-                    loadContent();
-                  } else {
-                    isSearching = true;
-                    _searchQuery = '';
-                  }
-                });
-              },
+              icon: Icon(viewMode == ViewMode.grid ? Icons.list : Icons.grid_view),
+              onPressed: toggleViewMode,
+              tooltip: viewMode == ViewMode.grid ? 'Список' : 'Сетка',
             ),
-            if (!isSearching) ...[
-              IconButton(icon: Icon(viewMode == ViewMode.grid ? Icons.list : Icons.grid_view), onPressed: toggleViewMode, tooltip: viewMode == ViewMode.grid ? 'Список' : 'Сетка'),
-              IconButton(icon: Icon(Icons.sort), onPressed: showSortMenu, tooltip: 'Сортировка'),
-              IconButton(icon: Icon(Icons.person), onPressed: () async {
-                final needRefresh = await Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen(apiToken: apiToken)));
+            IconButton(
+              icon: Icon(Icons.sort),
+              onPressed: showSortMenu,
+              tooltip: 'Сортировка',
+            ),
+            IconButton(
+              icon: Icon(Icons.person),
+              onPressed: () async {
+                final needRefresh = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ProfileScreen(apiToken: apiToken)),
+                );
                 if (needRefresh == true && mounted) await loadContent();
-              }, tooltip: 'Профиль'),
-              IconButton(icon: Icon(Icons.logout), onPressed: logout),
-            ],
+              },
+              tooltip: 'Профиль',
+            ),
+            IconButton(
+              icon: Icon(Icons.logout),
+              onPressed: logout,
+              tooltip: 'Выйти',
+            ),
           ],
-        ),
+        ],
+      ),
+
+
         body: Stack(
           children: [
             Column(
@@ -443,7 +485,7 @@ class _FilesScreenState extends State<FilesScreen>
                             setState(() {
                               if (val) {
                                 attributeFilters.add('mine');
-                                attributeFilters.remove('others'); // взаимоисключение
+                                attributeFilters.remove('others');
                               } else {
                                 attributeFilters.remove('mine');
                               }
@@ -522,7 +564,7 @@ class _FilesScreenState extends State<FilesScreen>
               child: FloatingActionButton(
                 heroTag: 'camera',
                 onPressed: takePhoto,
-                backgroundColor: Colors.blue,
+                backgroundColor: Colors.red,
                 child: Icon(Icons.camera_alt),
               ),
             ),

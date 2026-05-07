@@ -3,18 +3,84 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../services/api_service.dart';
 import '../widgets/file_icon.dart';
 import '../utils/format_file_size.dart';
 import 'package:share_plus/share_plus.dart';
+import '../utils/app_config.dart';
 
 mixin FileOperations {
   String get token;
   int get userId;
   bool get admin;
 
+  // Запрос пермишенов в зависимости от типа файла
+  Future<bool> _requestPermissions(String fileType) async {
+    final type = fileType.toLowerCase();
+    
+    // Для APK
+    if (type.contains('apk')) {
+      return await _canRequestInstallPackages();
+    }
+    
+    // Для аудио на Android 13+
+    if (type.contains('audio') || type.contains('mp3') || type.contains('wav') || type.contains('flac')) {
+      final status = await Permission.audio.status;
+      if (status.isDenied) {
+        final result = await Permission.audio.request();
+        return result.isGranted;
+      }
+    }
+    
+    // Для видео на Android 13+
+    if (type.contains('video') || type.contains('mp4') || type.contains('avi') || type.contains('mkv')) {
+      final status = await Permission.videos.status;
+      if (status.isDenied) {
+        final result = await Permission.videos.request();
+        return result.isGranted;
+      }
+    }
+    
+    // Для изображений на Android 13+
+    if (type.contains('image') || type.contains('jpg') || type.contains('jpeg') || 
+        type.contains('png') || type.contains('webp') || type.contains('gif') || type.contains('bmp')) {
+      final status = await Permission.photos.status;
+      if (status.isDenied) {
+        final result = await Permission.photos.request();
+        return result.isGranted;
+      }
+    }
+    
+    return true;
+  }
+
+
+
+
+  Future<bool> _canRequestInstallPackages() async {
+    if (Platform.isAndroid) {
+      final status = await Permission.requestInstallPackages.status;
+      if (status.isDenied) {
+        final result = await Permission.requestInstallPackages.request();
+        return result.isGranted;
+      }
+      return status.isGranted;
+    }
+    return true;
+  }
+
   Future<void> downloadFile(int fileId, String fileName, String fileType) async {
     final context = (this as dynamic).context as BuildContext;
+    
+    // Запрашиваем пермишены перед скачиванием
+    final hasPermission = await _requestPermissions(fileType);
+    if (!hasPermission && (this as dynamic).mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('❌ Нет разрешений для открытия этого типа файлов')),
+      );
+      return;
+    }
     
     showDialog(
       context: context,
@@ -132,22 +198,7 @@ mixin FileOperations {
                       GestureDetector(
                         onTap: () async {
                           if (savedPath != null) {
-                            try {
-                              final result = await OpenFile.open(savedPath!);
-                              if (result.type != ResultType.done) {
-                                if ((this as dynamic).mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(content: Text('Не удалось открыть файл: ${result.message}')),
-                                  );
-                                }
-                              }
-                            } catch (e) {
-                              if ((this as dynamic).mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Не удалось открыть файл: $e')),
-                                );
-                              }
-                            }
+                            await _openFile(savedPath!, fileType, context);
                           }
                         },
                         child: Column(
@@ -176,6 +227,53 @@ mixin FileOperations {
         );
       },
     );
+  }
+
+  Future<void> _openFile(String path, String fileType, BuildContext context) async {
+    final type = fileType.toLowerCase();
+    
+    // Для APK открываем через системный установщик
+    if (type.contains('apk')) {
+      try {
+        final result = await OpenFile.open(
+          path,
+          type: 'application/vnd.android.package-archive',
+        );
+        if (result.type != ResultType.done) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Не удалось открыть APK: ${result.message}')),
+            );
+          }
+        }
+        return;
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Не удалось открыть APK: $e')),
+          );
+        }
+        return;
+      }
+    }
+    
+    // Для всех остальных файлов
+    try {
+      final result = await OpenFile.open(path);
+      if (result.type != ResultType.done) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Не удалось открыть файл: ${result.message}')),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось открыть файл: $e')),
+        );
+      }
+    }
   }
 
   IconData getIconForType(String fileType) {
@@ -275,10 +373,9 @@ mixin FileOperations {
 
   void showFileMenu(dynamic file) {
     final context = (this as dynamic).context as BuildContext;
-    // Помечаем файл как просмотренный (без ожидания, чтобы меню открылось мгновенно)
     ApiService.markFileViewed(token, file['id']).then((_) {
       if ((this as dynamic).mounted) {
-        (this as dynamic).loadContent(); // обновим список, чтобы убрать бейдж
+        (this as dynamic).loadContent();
       }
     });
 
@@ -302,7 +399,6 @@ mixin FileOperations {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Превью изображения или иконка
                 if ((this as dynamic).isImageType(file['file_type']))
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
@@ -330,14 +426,12 @@ mixin FileOperations {
                 
                 SizedBox(height: 12),
                 
-                // Имя файла
                 Text(
                   file['original_name'],
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center,
                 ),
                 
-                // Описание (если есть)
                 if (hasDescription) ...[
                   SizedBox(height: 8),
                   Text(
@@ -351,7 +445,6 @@ mixin FileOperations {
                 
                 SizedBox(height: 10),
                 
-                // Информация о файле
                 Text('Размер: ${file['file_size'] != null ? formatFileSize(file['file_size']) : 'неизвестно'}'),
                 Text('Тип: ${file['file_type']}'),
                 Text('Хозяин: ${file['owner_nickname']}'),
@@ -359,7 +452,6 @@ mixin FileOperations {
                 
                 SizedBox(height: 8),
                 
-                // Переключатель видимости
                 InkWell(
                   onTap: () async {
                     final success = await ApiService.toggleVisibility(token, file['id']);
@@ -398,7 +490,6 @@ mixin FileOperations {
                 
                 SizedBox(height: 12),
                 
-                // Кнопки действий
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
@@ -415,7 +506,6 @@ mixin FileOperations {
                   ),
                 ),
                 
-                // Поделиться
                 SizedBox(height: 10),
                 SizedBox(
                   width: double.infinity,
@@ -432,8 +522,7 @@ mixin FileOperations {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                     ),
                   ),
-                ),  
-
+                ),
 
                 SizedBox(height: 10),
                 
@@ -513,7 +602,7 @@ mixin FileOperations {
         return;
       }
       await Share.share(
-        'Посмотри файл "${file['original_name']}" в Кусочнице:\n$shareUrl',
+        'Посмотри файл "${file['original_name']}" в ${AppConfig.appName}: ${AppConfig.subtitle}:\n$shareUrl',
         subject: file['original_name'],
       );
     } catch (e) {
@@ -524,6 +613,4 @@ mixin FileOperations {
       }
     }
   }
-
-
 }

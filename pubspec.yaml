@@ -1,5 +1,5 @@
-name: my_api_app
-description: "Кусочница — корпоративный файлообменник"
+name: adidas_exchanger
+description: "АДИДАС — наш обменник"
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -20,9 +20,14 @@ dependencies:
   cupertino_icons: ^1.0.8
   socket_io_client: ^2.0.3
   flutter_local_notifications: ^17.2.4
-  intl: ^0.19.0                  # добавлено для форматирования дат и размеров
+  intl: ^0.19.0
   cached_network_image: ^3.3.1
   share_plus: ^7.2.1
+  lottie: ^2.7.0
+  flutter_secure_storage: ^9.0.0
+  flutter_svg: ^2.0.10+1
+  crypto: ^3.0.3
+  
 
 dev_dependencies:
   flutter_test:
@@ -31,3 +36,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/animations/
+    - assets/logo/

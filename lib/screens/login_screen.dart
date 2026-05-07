@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import 'files_screen.dart';
 import '../services/websocket_service.dart';
+import '../utils/app_config.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -36,15 +38,12 @@ class _LoginScreenState extends State<LoginScreen> {
           await AuthService.saveUserNickname(response['user']['nickname']);
           await AuthService.saveIsAdmin(response['user']['is_admin']);
 
-            // Запускаем WebSocket для уведомлений
-            WebSocketService().connect(response['api_token']);
+          WebSocketService().connect(response['api_token']);
 
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => FilesScreen()),
-            );
-
-
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => FilesScreen()),
+          );
         } else {
           _showError('Ошибка входа');
         }
@@ -87,112 +86,149 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.orange.shade800, Colors.brown.shade700],
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.all(24),
-            child: Card(
-              elevation: 8,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _isLogin ? '🍖 Вход' : '📝 Регистрация',
-                        style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                      ),
-                      SizedBox(height: 24),
-                      TextFormField(
-                        decoration: InputDecoration(
-                          labelText: 'Телефон',
-                          prefixIcon: Icon(Icons.phone),
-                          border: OutlineInputBorder(),
+      backgroundColor: Colors.black,
+      body: Center(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Логотип
+              Lottie.asset(
+                'assets/animations/adidas.json',
+                width: 200,
+                height: 100,
+                repeat: true,
+              ),
+              SizedBox(height: 16),
+              Text(
+                AppConfig.appName,
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: 2,
+                ),
+              ),
+              SizedBox(height: 4),
+              Text(
+                AppConfig.subtitle,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.white70,
+                ),
+              ),
+              SizedBox(height: 32),
+              Card(
+                elevation: 0,
+                color: Colors.grey[900],
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                child: Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _isLogin ? 'Вход' : 'Регистрация',
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
                         ),
-                        onSaved: (val) => _phone = val!,
-                        validator: (val) => val!.isEmpty ? 'Введите телефон' : null,
-                      ),
-                      SizedBox(height: 16),
-                      TextFormField(
-                        decoration: InputDecoration(
-                          labelText: 'Пароль',
-                          prefixIcon: Icon(Icons.lock),
-                          border: OutlineInputBorder(),
-                        ),
-                        obscureText: true,
-                        onSaved: (val) => _password = val!,
-                        validator: (val) => val!.isEmpty ? 'Введите пароль' : null,
-                      ),
-                      if (!_isLogin) ...[
-                        SizedBox(height: 16),
+                        SizedBox(height: 24),
                         TextFormField(
                           decoration: InputDecoration(
-                            labelText: 'Никнейм',
-                            prefixIcon: Icon(Icons.person),
-                            border: OutlineInputBorder(),
+                            labelText: 'Телефон',
+                            prefixIcon: Icon(Icons.phone, color: Colors.red),
                           ),
-                          onSaved: (val) => _nickname = val!,
-                          validator: (val) => val!.isEmpty ? 'Введите никнейм' : null,
-                        ),
-                        SizedBox(height: 16),
-                        TextFormField(
-                          decoration: InputDecoration(
-                            labelText: 'Полное имя',
-                            prefixIcon: Icon(Icons.badge),
-                            border: OutlineInputBorder(),
-                          ),
-                          onSaved: (val) => _fullName = val!,
+                          onSaved: (val) => _phone = val!,
+                          validator: (val) => val!.isEmpty ? 'Введите телефон' : null,
+                          style: TextStyle(color: Colors.white),
                         ),
                         SizedBox(height: 16),
                         TextFormField(
                           decoration: InputDecoration(
-                            labelText: 'Должность',
-                            prefixIcon: Icon(Icons.work),
-                            border: OutlineInputBorder(),
+                            labelText: 'Пароль',
+                            prefixIcon: Icon(Icons.lock, color: Colors.red),
                           ),
-                          onSaved: (val) => _position = val!,
+                          obscureText: true,
+                          onSaved: (val) => _password = val!,
+                          validator: (val) => val!.isEmpty ? 'Введите пароль' : null,
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        if (!_isLogin) ...[
+                          SizedBox(height: 16),
+                          TextFormField(
+                            decoration: InputDecoration(
+                              labelText: 'Никнейм',
+                              prefixIcon: Icon(Icons.person, color: Colors.red),
+                            ),
+                            onSaved: (val) => _nickname = val!,
+                            validator: (val) => val!.isEmpty ? 'Введите никнейм' : null,
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          SizedBox(height: 16),
+                          TextFormField(
+                            decoration: InputDecoration(
+                              labelText: 'Полное имя',
+                              prefixIcon: Icon(Icons.badge, color: Colors.red),
+                            ),
+                            onSaved: (val) => _fullName = val!,
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          SizedBox(height: 16),
+                          TextFormField(
+                            decoration: InputDecoration(
+                              labelText: 'Должность',
+                              prefixIcon: Icon(Icons.work, color: Colors.red),
+                            ),
+                            onSaved: (val) => _position = val!,
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ],
+                        SizedBox(height: 24),
+                        if (_isLoading)
+                          CircularProgressIndicator(color: Colors.red)
+                        else
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: _submit,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                                minimumSize: Size(double.infinity, 50),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(
+                                _isLogin ? 'Войти' : 'Зарегистрироваться',
+                                style: TextStyle(fontSize: 18),
+                              ),
+                            ),
+                          ),
+                        SizedBox(height: 16),
+                        TextButton(
+                          onPressed: () => setState(() => _isLogin = !_isLogin),
+                          child: Text(
+                            _isLogin
+                                ? 'Нет аккаунта? Зарегистрироваться'
+                                : 'Уже есть аккаунт? Войти',
+                            style: TextStyle(color: Colors.white70),
+                          ),
                         ),
                       ],
-                      SizedBox(height: 24),
-                      if (_isLoading)
-                        CircularProgressIndicator()
-                      else
-                        ElevatedButton(
-                          onPressed: _submit,
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: Size(double.infinity, 50),
-                            backgroundColor: Colors.orange.shade800,
-                          ),
-                          child: Text(
-                            _isLogin ? 'Войти' : 'Зарегистрироваться',
-                            style: TextStyle(fontSize: 18),
-                          ),
-                        ),
-                      SizedBox(height: 16),
-                      TextButton(
-                        onPressed: () => setState(() => _isLogin = !_isLogin),
-                        child: Text(
-                          _isLogin
-                              ? 'Нет аккаунта? Зарегистрироваться'
-                              : 'Уже есть аккаунт? Войти',
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),
