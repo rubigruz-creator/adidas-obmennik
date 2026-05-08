@@ -1,20 +1,30 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' show File, Directory;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+
+
+// Web-специфичные импорты будут только в web-версии через условный импорт
+import 'dart:typed_data';
+// ignore: avoid_web_libraries_in_flutter
+import 'package:universal_html/html.dart' as html show AnchorElement;
 
 // Класс для отмены операций
 class CancelToken {
   bool isCancelled = false;
-  
+
   void cancel() {
     isCancelled = true;
   }
 }
 
 class ApiService {
-  static const String _baseUrl = 'https://90.156.171.36';
+  // static const String _baseUrl = 'https://90.156.171.36';
+  static const String _baseUrl = 'https://gazonbaza.ru';
   static const String _host = 'gazonbaza.ru';
+
+  // ============ БАЗОВЫЕ HTTP-МЕТОДЫ ============
 
   static Future<http.Response> _post(String token, String endpoint, Map<String, dynamic> data) async {
     final url = Uri.parse('$_baseUrl$endpoint');
@@ -26,6 +36,8 @@ class ApiService {
     final streamedResponse = await request.send();
     return await http.Response.fromStream(streamedResponse);
   }
+
+  // ============ ФАЙЛЫ И ПАПКИ ============
 
   static Future<Map<String, dynamic>> getFolderContent(String token, {int? folderId, String search = ''}) async {
     Uri url;
@@ -39,7 +51,7 @@ class ApiService {
     request.headers['Host'] = _host;
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
-    
+
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return {
@@ -56,24 +68,38 @@ class ApiService {
     return content['files'];
   }
 
-  static Future<bool> uploadFile(String token, File file, String fileName, {bool isPublic = false, int? folderId,
-  String? description,}) async {
+  // ============ ЗАГРУЗКА ФАЙЛА ============
+
+  static Future<bool> uploadFile(String token, File file, String fileName, {
+    bool isPublic = false,
+    int? folderId,
+    String? description,
+  }) async {
     final url = Uri.parse('$_baseUrl/upload.php');
     final request = http.MultipartRequest('POST', url);
     request.headers['X-API-Token'] = token;
     request.headers['Host'] = _host;
-    request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: fileName));
+
+    if (kIsWeb) {
+      final bytes = await file.readAsBytes();
+      request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
+    } else {
+      request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: fileName));
+    }
+
     request.fields['is_public'] = isPublic ? '1' : '0';
     if (folderId != null) {
       request.fields['folder_id'] = folderId.toString();
     }
     if (description != null && description.isNotEmpty) {
       request.fields['description'] = description;
-    }   
+    }
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
     return response.statusCode == 200;
   }
+
+  // ============ СКАЧИВАНИЕ ФАЙЛА (КРОСПЛАТФОРМЕННОЕ) ============
 
   static Future<bool> downloadFile(String token, int fileId, String fileName) async {
     final url = Uri.parse('$_baseUrl/download.php?id=$fileId');
@@ -82,42 +108,63 @@ class ApiService {
     request.headers['Host'] = _host;
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
-    
+
     if (response.statusCode == 200) {
-      try {
-        // Сохраняем в общедоступную папку Downloads
-        final directory = Directory('/storage/emulated/0/Download');
-        if (!await directory.exists()) {
-          await directory.create(recursive: true);
-        }
-        
-        // Уникальное имя если файл уже существует
-        String filePath = '${directory.path}/$fileName';
-        int counter = 1;
-        while (await File(filePath).exists()) {
-          final dotIndex = fileName.lastIndexOf('.');
-          final baseName = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
-          final ext = dotIndex > 0 ? fileName.substring(dotIndex) : '';
-          filePath = '${directory.path}/${baseName}_$counter$ext';
-          counter++;
-        }
-        
-        final file = File(filePath);
-        await file.writeAsBytes(response.bodyBytes);
+      if (kIsWeb) {
+        // Web: запускаем скачивание через браузер
+        _downloadFileWeb(response.bodyBytes, fileName);
         return true;
-      } catch (e) {
-        // Если нет доступа — сохраняем в папку приложения
-        final directory = await getDownloadsDirectory();
-        if (directory != null) {
-          final file = File('${directory.path}/$fileName');
-          await file.writeAsBytes(response.bodyBytes);
-          return true;
-        }
+      } else {
+        // Android: сохраняем на диск
+        return await _saveFileAndroid(response.bodyBytes, fileName);
       }
     }
     return false;
   }
 
+  /// Сохранение файла на Android
+  static Future<bool> _saveFileAndroid(Uint8List bytes, String fileName) async {
+    try {
+      final directory = Directory('/storage/emulated/0/Download');
+      if (!await directory.exists()) {
+        await directory.create(recursive: true);
+      }
+
+      String filePath = '${directory.path}/$fileName';
+      int counter = 1;
+      while (await File(filePath).exists()) {
+        final dotIndex = fileName.lastIndexOf('.');
+        final baseName = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
+        final ext = dotIndex > 0 ? fileName.substring(dotIndex) : '';
+        filePath = '${directory.path}/${baseName}_$counter$ext';
+        counter++;
+      }
+
+      final file = File(filePath);
+      await file.writeAsBytes(bytes);
+      return true;
+    } catch (e) {
+      final directory = await getDownloadsDirectory();
+      if (directory != null) {
+        final file = File('${directory.path}/$fileName');
+        await file.writeAsBytes(bytes);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Запуск скачивания в браузере
+  static void _downloadFileWeb(Uint8List bytes, String fileName) {
+    final base64 = base64Encode(bytes);
+    final anchor = html.AnchorElement(
+      href: 'data:application/octet-stream;base64,$base64',
+    )
+      ..setAttribute('download', fileName)
+      ..click();
+  }
+
+  // ============ ОСТАЛЬНЫЕ ОПЕРАЦИИ ============
 
   static Future<bool> deleteFile(String token, int fileId) async {
     final response = await _post(token, '/delete.php', {'id': fileId});
@@ -134,18 +181,16 @@ class ApiService {
     return response.statusCode == 200;
   }
 
-  // Folders API
-  
-  // ИСПРАВЛЕННЫЙ createFolder — обрабатывает folder_id как int ИЛИ String
+  // ============ ПАПКИ ============
+
   static Future<int?> createFolder(String token, String name, {int? parentId}) async {
     final response = await _post(token, '/create_folder.php', {
       'name': name,
       'parent_id': parentId,
     });
-    
+
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      // folder_id может прийти как int или как String
       final folderId = data['folder_id'];
       if (folderId is int) return folderId;
       if (folderId is String) return int.tryParse(folderId);
@@ -170,42 +215,35 @@ class ApiService {
     return response.statusCode == 200;
   }
 
-  // ИСПРАВЛЕННЫЙ getFolders — теперь получает ВСЕ папки рекурсивно
   static Future<List<dynamic>> getFolders(String token, {int? parentId}) async {
-    // Если parentId не указан — получаем плоский список ВСЕХ папок
     if (parentId == null) {
-      // Получаем корневые папки
       final rootFolders = await _fetchFoldersRaw(token, parentId: null);
       List<dynamic> allFolders = List<dynamic>.from(rootFolders);
-      
-      // Рекурсивно собираем подпапки
+
       for (final folder in rootFolders) {
         final subFolders = await _fetchSubFolders(token, folder['id']);
         allFolders.addAll(subFolders);
       }
-      
+
       return allFolders;
     }
-    
-    // Если parentId указан — возвращаем только дочерние папки
+
     return await _fetchFoldersRaw(token, parentId: parentId);
   }
 
-  // Вспомогательный метод: рекурсивный сбор подпапок
   static Future<List<dynamic>> _fetchSubFolders(String token, int parentId) async {
     final folders = await _fetchFoldersRaw(token, parentId: parentId);
     List<dynamic> result = [];
-    
+
     for (final folder in folders) {
       result.add(folder);
       final subFolders = await _fetchSubFolders(token, folder['id']);
       result.addAll(subFolders);
     }
-    
+
     return result;
   }
 
-  // Базовый HTTP-запрос для получения папок
   static Future<List<dynamic>> _fetchFoldersRaw(String token, {int? parentId}) async {
     Uri url;
     if (parentId != null) {
@@ -213,13 +251,13 @@ class ApiService {
     } else {
       url = Uri.parse('$_baseUrl/list_folders.php');
     }
-    
+
     final request = http.Request('GET', url);
     request.headers['X-API-Token'] = token;
     request.headers['Host'] = _host;
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
-    
+
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       return data['folders'] ?? [];
@@ -235,7 +273,10 @@ class ApiService {
     return response.statusCode == 200;
   }
 
-  static Future<Map<String, dynamic>> register(String phone, String password, String nickname, String fullName, String position) async {
+  // ============ АВТОРИЗАЦИЯ ============
+
+  static Future<Map<String, dynamic>> register(
+      String phone, String password, String nickname, String fullName, String position) async {
     final url = Uri.parse('$_baseUrl/register.php');
     final response = await http.post(
       url,
@@ -252,7 +293,7 @@ class ApiService {
       }),
     );
     return jsonDecode(response.body);
-  }     
+  }
 
   static Future<Map<String, dynamic>> login(String phone, String password) async {
     final url = Uri.parse('$_baseUrl/login.php');
@@ -270,7 +311,8 @@ class ApiService {
     return jsonDecode(response.body);
   }
 
-  // Profile API
+  // ============ ПРОФИЛЬ ============
+
   static Future<Map<String, dynamic>> getProfile(String token) async {
     final url = Uri.parse('$_baseUrl/profile.php');
     final request = http.Request('GET', url);
@@ -278,7 +320,7 @@ class ApiService {
     request.headers['Host'] = _host;
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
-    
+
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       if (data['status'] == 'success') {
@@ -297,9 +339,9 @@ class ApiService {
     if (nickname != null) body['nickname'] = nickname;
     if (fullName != null) body['full_name'] = fullName;
     if (position != null) body['position'] = position;
-    
+
     final response = await _post(token, '/profile.php', body);
-    
+
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       if (data['status'] == 'success') {
@@ -309,9 +351,8 @@ class ApiService {
     throw Exception('Failed to update profile');
   }
 
-  // ============ МЕТОДЫ С ПРОГРЕССОМ ============
-  
-  // Загрузка файла с прогрессом (упрощённая версия с симуляцией)
+  // ============ ЗАГРУЗКА С ПРОГРЕССОМ ============
+
   static Future<bool> uploadFileWithProgress(
     String token,
     File file,
@@ -321,7 +362,6 @@ class ApiService {
     int? folderId,
     CancelToken? cancelToken,
   }) async {
-    // Симулируем прогресс от 0 до 0.9
     int step = 0;
     final timer = Stream.periodic(Duration(milliseconds: 100), (_) {
       if (cancelToken?.isCancelled == true) return;
@@ -330,29 +370,30 @@ class ApiService {
         onProgress(step / 100);
       }
     });
-    
+
     final subscription = timer.listen((_) {});
-    
+
     try {
-      final result = await uploadFile(token, file, fileName, 
-        isPublic: isPublic, 
+      final result = await uploadFile(token, file, fileName,
+        isPublic: isPublic,
         folderId: folderId,
       );
-      
+
       subscription.cancel();
-      
+
       if (result && (cancelToken?.isCancelled != true)) {
         onProgress(1.0);
       }
-      
+
       return result;
     } catch (e) {
       subscription.cancel();
       rethrow;
     }
   }
-  
-  // Скачивание файла с прогрессом
+
+  // ============ СКАЧИВАНИЕ С ПРОГРЕССОМ ============
+
   static Future<bool> downloadFileWithProgress(
     String token,
     int fileId,
@@ -364,44 +405,39 @@ class ApiService {
     final request = http.Request('GET', url);
     request.headers['X-API-Token'] = token;
     request.headers['Host'] = _host;
-    
+
     final streamedResponse = await request.send();
-    
+
     if (cancelToken?.isCancelled == true) return false;
-    
+
     final contentLength = streamedResponse.contentLength;
-    final directory = await getDownloadsDirectory();
-    if (directory == null) return false;
-    
-    final file = File('${directory.path}/$fileName');
-    final sink = file.openWrite();
+    final bytes = <int>[];
     int receivedBytes = 0;
-    
+
     try {
       await for (final chunk in streamedResponse.stream) {
-        if (cancelToken?.isCancelled == true) {
-          await sink.close();
-          await file.delete();
-          return false;
-        }
+        if (cancelToken?.isCancelled == true) return false;
         receivedBytes += chunk.length;
-        sink.add(chunk);
+        bytes.addAll(chunk);
         if (contentLength != null) {
           onProgress(receivedBytes / contentLength);
         }
       }
-      await sink.close();
       onProgress(1.0);
+
+      final fullBytes = Uint8List.fromList(bytes);
+
+      if (kIsWeb) {
+        _downloadFileWeb(fullBytes, fileName);
+      } else {
+        await _saveFileAndroid(fullBytes, fileName);
+      }
       return true;
     } catch (e) {
-      await sink.close();
-      await file.delete();
       rethrow;
     }
   }
 
-
-  // Скачивание файла с прогрессом (простая версия)
   static Future<bool> downloadFileSimple(
     String token,
     int fileId,
@@ -412,57 +448,39 @@ class ApiService {
     final request = http.Request('GET', url);
     request.headers['X-API-Token'] = token;
     request.headers['Host'] = _host;
-    
+
     final streamedResponse = await request.send();
     final contentLength = streamedResponse.contentLength;
-    
+    final bytes = <int>[];
+    int receivedBytes = 0;
+
     try {
-      // Сохраняем в общедоступную папку Downloads
-      final directory = Directory('/storage/emulated/0/Download');
-      if (!await directory.exists()) {
-        await directory.create(recursive: true);
+      await for (final chunk in streamedResponse.stream) {
+        receivedBytes += chunk.length;
+        bytes.addAll(chunk);
+        if (contentLength != null) {
+          onProgress(receivedBytes / contentLength);
+        }
       }
-      
-      final file = File('${directory.path}/$fileName');
-      final sink = file.openWrite();
-      int receivedBytes = 0;
-      
-      await streamedResponse.stream.listen(
-        (chunk) {
-          receivedBytes += chunk.length;
-          sink.add(chunk);
-          if (contentLength != null) {
-            onProgress(receivedBytes / contentLength);
-          }
-        },
-        onDone: () async {
-          await sink.close();
-          onProgress(1.0);
-        },
-        onError: (error) async {
-          await sink.close();
-          throw error;
-        },
-      ).asFuture();
-      
+      onProgress(1.0);
+
+      final fullBytes = Uint8List.fromList(bytes);
+
+      if (kIsWeb) {
+        _downloadFileWeb(fullBytes, fileName);
+      } else {
+        await _saveFileAndroid(fullBytes, fileName);
+      }
       return true;
     } catch (e) {
-      // Fallback
-      final directory = await getDownloadsDirectory();
-      if (directory != null) {
-        final file = File('${directory.path}/$fileName');
-        final bytes = await streamedResponse.stream.toList();
-        await file.writeAsBytes(bytes.expand((x) => x).toList());
-        onProgress(1.0);
-        return true;
-      }
       return false;
     }
   }
 
+  // ============ ШЕРИНГ И ОТМЕТКИ ============
+
   static String thumbnailUrl(int fileId) => '$_baseUrl/download.php?id=$fileId&thumbnail=1';
 
-  // Получение публичной ссылки для шеринга
   static Future<String?> getShareLink(String token, int fileId) async {
     final response = await _post(token, '/get_share_link.php', {'file_id': fileId});
     if (response.statusCode == 200) {
@@ -476,9 +494,4 @@ class ApiService {
     final response = await _post(token, '/mark_viewed.php', {'file_id': fileId});
     return response.statusCode == 200;
   }
-
-
-
-
-
 }

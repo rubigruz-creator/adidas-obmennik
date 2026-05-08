@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import '../services/api_service.dart';
@@ -55,7 +56,7 @@ mixin UploadOperations {
   Future<String?> showDescriptionDialog() async {
     final context = (this as dynamic).context as BuildContext;
     final controller = TextEditingController();
-    
+
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) {
@@ -86,36 +87,78 @@ mixin UploadOperations {
         );
       },
     );
-    
+
     return result;
   }
 
   Future<void> pickAnyFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles();
     if (result == null) return;
-    final file = File(result.files.first.path!);
+
+    final pickedFile = result.files.first;
+    File file;
+
+    if (kIsWeb) {
+      if (pickedFile.bytes != null) {
+        final tempDir = Directory.systemTemp;
+        final tempPath = '${tempDir.path}/${pickedFile.name}';
+        file = File(tempPath);
+        await file.writeAsBytes(pickedFile.bytes!);
+      } else {
+        return;
+      }
+    } else {
+      if (pickedFile.path != null) {
+        file = File(pickedFile.path!);
+      } else {
+        return;
+      }
+    }
+
     final description = await showDescriptionDialog();
     final isPublic = await showVisibilityDialog();
-    await uploadFile(file, result.files.first.name, isPublic, description: description);
+    await uploadFile(file, pickedFile.name, isPublic, description: description);
   }
 
   Future<void> pickImageFromGallery() async {
     final picker = ImagePicker();
     final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      final description = await showDescriptionDialog();
-      final isPublic = await showVisibilityDialog();
-      await uploadFile(File(pickedFile.path), pickedFile.name, isPublic, description: description);
+    if (pickedFile == null) return;
+
+    File file;
+    if (kIsWeb) {
+      final bytes = await pickedFile.readAsBytes();
+      final tempDir = Directory.systemTemp;
+      final tempPath = '${tempDir.path}/${pickedFile.name}';
+      file = File(tempPath);
+      await file.writeAsBytes(bytes);
+    } else {
+      file = File(pickedFile.path);
     }
+
+    final description = await showDescriptionDialog();
+    final isPublic = await showVisibilityDialog();
+    await uploadFile(file, pickedFile.name, isPublic, description: description);
   }
 
   Future<void> takePhoto() async {
     final picker = ImagePicker();
     final XFile? pickedFile = await picker.pickImage(source: ImageSource.camera);
-    if (pickedFile != null) {
-      final description = await showDescriptionDialog();
-      final isPublic = await showVisibilityDialog();
-      await uploadFile(File(pickedFile.path), pickedFile.name, isPublic, description: description);
+    if (pickedFile == null) return;
+
+    File file;
+    if (kIsWeb) {
+      final bytes = await pickedFile.readAsBytes();
+      final tempDir = Directory.systemTemp;
+      final tempPath = '${tempDir.path}/${pickedFile.name}';
+      file = File(tempPath);
+      await file.writeAsBytes(bytes);
+    } else {
+      file = File(pickedFile.path);
     }
+
+    final description = await showDescriptionDialog();
+    final isPublic = await showVisibilityDialog();
+    await uploadFile(file, pickedFile.name, isPublic, description: description);
   }
 }
