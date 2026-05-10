@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:file_picker/file_picker.dart';
@@ -13,7 +12,7 @@ mixin UploadOperations {
 
   Timer? uploadProgressTimer;
 
-  Future<void> uploadFileBytes(Uint8List bytes, String fileName, bool isPublic, {String? description}) async {
+  Future<void> uploadFile(File file, String fileName, bool isPublic, {String? description}) async {
     final context = (this as dynamic).context as BuildContext;
     double progress = 0.0;
     
@@ -34,10 +33,9 @@ mixin UploadOperations {
     });
     
     try {
-      // Напрямую вызываем API, передавая байты
-      final success = await ApiService.uploadFileBytes(
+      final success = await ApiService.uploadFile(
         token, 
-        bytes, 
+        file, 
         fileName, 
         isPublic: isPublic, 
         folderId: folderId, 
@@ -80,12 +78,6 @@ mixin UploadOperations {
         );
       }
     }
-  }
-
-  // Оставлено для обратной совместимости, но тоже использует байты
-  Future<void> uploadFile(File file, String fileName, bool isPublic, {String? description}) async {
-    final bytes = await file.readAsBytes();
-    await uploadFileBytes(bytes, fileName, isPublic, description: description);
   }
 
   Future<bool> showVisibilityDialog() async {
@@ -158,37 +150,55 @@ mixin UploadOperations {
 
       final pickedFile = result.files.first;
       
+      // Проверка размера файла (300 МБ максимум)
       if (pickedFile.size > 300 * 1024 * 1024) {
         final context = (this as dynamic).context as BuildContext;
         if ((this as dynamic).mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('❌ Файл слишком большой. Максимум 300 МБ'), backgroundColor: Colors.red)
+            SnackBar(
+              content: Text('❌ Файл слишком большой. Максимум 300 МБ'),
+              backgroundColor: Colors.red,
+            )
           );
         }
         return;
       }
 
-      Uint8List? bytes;
+      File file;
+
       if (kIsWeb) {
-        bytes = pickedFile.bytes;
+        // В веб-версии используем байты напрямую, без создания временного файла
+        if (pickedFile.bytes != null && pickedFile.bytes!.isNotEmpty) {
+          // Создаем временный файл в памяти для совместимости с API
+          final tempDir = Directory.systemTemp;
+          final tempPath = '${tempDir.path}/${pickedFile.name}';
+          file = File(tempPath);
+          await file.writeAsBytes(pickedFile.bytes!);
+        } else {
+          throw Exception('Не удалось прочитать файл в веб-версии');
+        }
       } else {
-        if (pickedFile.path != null) {
-          bytes = await File(pickedFile.path!).readAsBytes();
+        // В Android используем путь к файлу
+        if (pickedFile.path != null && pickedFile.path!.isNotEmpty) {
+          file = File(pickedFile.path!);
+        } else {
+          throw Exception('Путь к файлу не найден');
         }
       }
-      
-      if (bytes == null || bytes.isEmpty) throw Exception('Не удалось прочитать файл');
 
       final description = await showDescriptionDialog();
       final isPublic = await showVisibilityDialog();
-      await uploadFileBytes(bytes, pickedFile.name, isPublic, description: description);
+      await uploadFile(file, pickedFile.name, isPublic, description: description);
       
     } catch (e) {
       print('❌ Ошибка при выборе файла: $e');
       final context = (this as dynamic).context as BuildContext;
       if ((this as dynamic).mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Ошибка: ${e.toString()}'), backgroundColor: Colors.red)
+          SnackBar(
+            content: Text('❌ Ошибка: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          )
         );
       }
     }
@@ -197,20 +207,40 @@ mixin UploadOperations {
   Future<void> pickImageFromGallery() async {
     try {
       final picker = ImagePicker();
-      final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+      final XFile? pickedFile = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85, // Сжатие для экономии трафика
+      );
+      
       if (pickedFile == null) return;
 
-      final bytes = await pickedFile.readAsBytes();
+      File file;
+      
+      if (kIsWeb) {
+        // В веб-версии читаем байты
+        final bytes = await pickedFile.readAsBytes();
+        final tempDir = Directory.systemTemp;
+        final tempPath = '${tempDir.path}/${pickedFile.name}';
+        file = File(tempPath);
+        await file.writeAsBytes(bytes);
+      } else {
+        // В Android используем путь
+        file = File(pickedFile.path);
+      }
+
       final description = await showDescriptionDialog();
       final isPublic = await showVisibilityDialog();
-      await uploadFileBytes(bytes, pickedFile.name, isPublic, description: description);
+      await uploadFile(file, pickedFile.name, isPublic, description: description);
       
     } catch (e) {
       print('❌ Ошибка при выборе изображения: $e');
       final context = (this as dynamic).context as BuildContext;
       if ((this as dynamic).mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Ошибка: ${e.toString()}'), backgroundColor: Colors.red)
+          SnackBar(
+            content: Text('❌ Ошибка: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          )
         );
       }
     }
@@ -219,20 +249,40 @@ mixin UploadOperations {
   Future<void> takePhoto() async {
     try {
       final picker = ImagePicker();
-      final XFile? pickedFile = await picker.pickImage(source: ImageSource.camera, imageQuality: 85);
+      final XFile? pickedFile = await picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 85,
+      );
+      
       if (pickedFile == null) return;
 
-      final bytes = await pickedFile.readAsBytes();
+      File file;
+      
+      if (kIsWeb) {
+        // В веб-версии читаем байты
+        final bytes = await pickedFile.readAsBytes();
+        final tempDir = Directory.systemTemp;
+        final tempPath = '${tempDir.path}/${pickedFile.name}';
+        file = File(tempPath);
+        await file.writeAsBytes(bytes);
+      } else {
+        // В Android используем путь
+        file = File(pickedFile.path);
+      }
+
       final description = await showDescriptionDialog();
       final isPublic = await showVisibilityDialog();
-      await uploadFileBytes(bytes, pickedFile.name, isPublic, description: description);
+      await uploadFile(file, pickedFile.name, isPublic, description: description);
       
     } catch (e) {
       print('❌ Ошибка при фотографировании: $e');
       final context = (this as dynamic).context as BuildContext;
       if ((this as dynamic).mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Ошибка: ${e.toString()}'), backgroundColor: Colors.red)
+          SnackBar(
+            content: Text('❌ Ошибка: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          )
         );
       }
     }

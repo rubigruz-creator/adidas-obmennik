@@ -63,25 +63,9 @@ class ApiService {
     return content['files'];
   }
 
-
   // ============ ЗАГРУЗКА ФАЙЛА ============
 
-  /// Загрузка из объекта File (Android)
   static Future<bool> uploadFile(String token, File file, String fileName, {
-    bool isPublic = false,
-    int? folderId,
-    String? description,
-  }) async {
-    final bytes = await file.readAsBytes();
-    return await uploadFileBytes(token, bytes, fileName,
-      isPublic: isPublic,
-      folderId: folderId,
-      description: description,
-    );
-  }
-
-  /// Загрузка из байтов (веб и универсальный)
-  static Future<bool> uploadFileBytes(String token, Uint8List bytes, String fileName, {
     bool isPublic = false,
     int? folderId,
     String? description,
@@ -91,8 +75,12 @@ class ApiService {
     request.headers['X-API-Token'] = token;
     request.headers['Host'] = _host;
 
-    // Всегда используем fromBytes, как в вебе, так и на Android
-    request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
+    if (kIsWeb) {
+      final bytes = await file.readAsBytes();
+      request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
+    } else {
+      request.files.add(await http.MultipartFile.fromPath('file', file.path, filename: fileName));
+    }
 
     request.fields['is_public'] = isPublic ? '1' : '0';
     if (folderId != null) {
@@ -107,6 +95,7 @@ class ApiService {
       final response = await http.Response.fromStream(streamedResponse);
       
       if (response.statusCode == 200) {
+        // Проверяем, что сервер вернул успешный JSON
         try {
           final data = jsonDecode(response.body);
           if (data['status'] == 'success') {
@@ -116,6 +105,7 @@ class ApiService {
             return false;
           }
         } catch (e) {
+          // Если не JSON, но статус 200 - считаем успехом
           return true;
         }
       } else {
@@ -127,8 +117,6 @@ class ApiService {
       return false;
     }
   }
-
-
 
   // ============ СКАЧИВАНИЕ ФАЙЛА (КРОСПЛАТФОРМЕННОЕ) ============
 
@@ -254,11 +242,7 @@ class ApiService {
       
       // Очистка через небольшую задержку
       Future.delayed(Duration(milliseconds: 100), () {
-        try {
-          anchor.remove();
-        } catch (e) {
-          // Элемент уже удалён
-        }
+        html.document.body?.removeChild(anchor);
         html.Url.revokeObjectUrl(url);
       });
       
@@ -268,8 +252,6 @@ class ApiService {
       throw Exception('Не удалось скачать файл в браузере: $e');
     }
   }
-
-
 
   // ============ ОСТАЛЬНЫЕ ОПЕРАЦИИ ============
 

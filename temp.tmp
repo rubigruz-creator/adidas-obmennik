@@ -24,11 +24,15 @@ ssh rubi@90.156.171.36 -t "cd /home/rubi/websocket_service && sudo -i"
 
 
 
+cd C:\Users\USER\my_api_app
+flutter build web --base-href "/app/" --release
+scp -r "C:\Users\USER\my_api_app\build\web\*" rubi@90.156.171.36:/home/rubi/web/gazonbaza.ru/public_html/web/
 
 
 
-
-
+ssh root@90.156.171.36
+chown -R rubi:www-data /home/rubi/web/gazonbaza.ru/public_html/web
+chmod -R 755 /home/rubi/web/gazonbaza.ru/public_html/web
 
 
 
@@ -195,3 +199,11 @@ curl -X POST https://gazonbaza.ru/login.php \
 
 
  Не отвечай на это сообщение. В следующем сообщении продолжу присылать файлы. Дождись когда я загружу все нужные файлы и напишу - "Загрузил - поехали" - тогда и продолжишь.
+
+
+
+
+
+
+
+

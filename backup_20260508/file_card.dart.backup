@@ -66,74 +66,57 @@ class _FileCardState extends State<FileCard> {
   }
 
   Future<void> _loadThumbnailWeb(String url) async {
-    try {
-      final client = http.Client();
-      final request = http.Request('GET', Uri.parse(url));
-      request.headers['X-API-Token'] = widget.apiToken;
-      request.headers['Host'] = 'gazonbaza.ru';
-      
-      final streamedResponse = await client.send(request);
-      final response = await http.Response.fromStream(streamedResponse);
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {
+        'X-API-Token': widget.apiToken,
+        'Host': 'gazonbaza.ru',
+      },
+    );
 
-      if (response.statusCode == 200) {
-        final contentType = response.headers['content-type'] ?? '';
-        
-        if (contentType.contains('application/json')) {
-          final data = jsonDecode(response.body);
-          throw Exception(data['message'] ?? 'Ошибка загрузки превью');
-        }
-        
-        setState(() {
-          _thumbnailBytes = response.bodyBytes;
-          _isLoadingThumbnail = false;
-        });
-      } else {
-        throw Exception('HTTP ${response.statusCode}');
+    if (response.statusCode == 200) {
+      final contentType = response.headers['content-type'] ?? '';
+      
+      if (contentType.contains('application/json')) {
+        // Сервер вернул JSON ошибку вместо изображения
+        final data = jsonDecode(response.body);
+        throw Exception(data['message'] ?? 'Ошибка загрузки превью');
       }
-    } catch (e) {
-      print('❌ Ошибка загрузки превью: $e');
+      
       setState(() {
-        _thumbnailError = e.toString();
+        _thumbnailBytes = response.bodyBytes;
         _isLoadingThumbnail = false;
       });
+    } else {
+      throw Exception('HTTP ${response.statusCode}');
     }
   }
-
 
   Future<void> _loadThumbnailMobile(String url) async {
-    try {
-      final client = http.Client();
-      final request = http.Request('GET', Uri.parse(url));
-      request.headers['X-API-Token'] = widget.apiToken;
-      request.headers['Host'] = 'gazonbaza.ru';
-      
-      final streamedResponse = await client.send(request);
-      final response = await http.Response.fromStream(streamedResponse);
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {
+        'X-API-Token': widget.apiToken,
+        'Host': 'gazonbaza.ru',
+      },
+    );
 
-      if (response.statusCode == 200) {
-        final contentType = response.headers['content-type'] ?? '';
-        
-        if (contentType.contains('application/json')) {
-          final data = jsonDecode(response.body);
-          throw Exception(data['message'] ?? 'Ошибка загрузки превью');
-        }
-        
-        setState(() {
-          _thumbnailBytes = response.bodyBytes;
-          _isLoadingThumbnail = false;
-        });
-      } else {
-        throw Exception('HTTP ${response.statusCode}');
+    if (response.statusCode == 200) {
+      final contentType = response.headers['content-type'] ?? '';
+      
+      if (contentType.contains('application/json')) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['message'] ?? 'Ошибка загрузки превью');
       }
-    } catch (e) {
-      print('❌ Ошибка загрузки превью: $e');
+      
       setState(() {
-        _thumbnailError = e.toString();
+        _thumbnailBytes = response.bodyBytes;
         _isLoadingThumbnail = false;
       });
+    } else {
+      throw Exception('HTTP ${response.statusCode}');
     }
   }
-
 
   @override
   Widget build(BuildContext context) {

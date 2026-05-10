@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:open_file/open_file.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -15,16 +15,15 @@ mixin FileOperations {
   int get userId;
   bool get admin;
 
-  // Запрос пермишенов в зависимости от типа файла
   Future<bool> _requestPermissions(String fileType) async {
+    if (kIsWeb) return true;
+
     final type = fileType.toLowerCase();
     
-    // Для APK
     if (type.contains('apk')) {
       return await _canRequestInstallPackages();
     }
     
-    // Для аудио на Android 13+
     if (type.contains('audio') || type.contains('mp3') || type.contains('wav') || type.contains('flac')) {
       final status = await Permission.audio.status;
       if (status.isDenied) {
@@ -33,7 +32,6 @@ mixin FileOperations {
       }
     }
     
-    // Для видео на Android 13+
     if (type.contains('video') || type.contains('mp4') || type.contains('avi') || type.contains('mkv')) {
       final status = await Permission.videos.status;
       if (status.isDenied) {
@@ -42,7 +40,6 @@ mixin FileOperations {
       }
     }
     
-    // Для изображений на Android 13+
     if (type.contains('image') || type.contains('jpg') || type.contains('jpeg') || 
         type.contains('png') || type.contains('webp') || type.contains('gif') || type.contains('bmp')) {
       final status = await Permission.photos.status;
@@ -54,9 +51,6 @@ mixin FileOperations {
     
     return true;
   }
-
-
-
 
   Future<bool> _canRequestInstallPackages() async {
     if (Platform.isAndroid) {
@@ -73,15 +67,17 @@ mixin FileOperations {
   Future<void> downloadFile(int fileId, String fileName, String fileType) async {
     final context = (this as dynamic).context as BuildContext;
     
-    // Запрашиваем пермишены перед скачиванием
     final hasPermission = await _requestPermissions(fileType);
     if (!hasPermission && (this as dynamic).mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('❌ Нет разрешений для открытия этого типа файлов')),
+        const SnackBar(content: Text('Нет разрешений для открытия этого типа файлов')),
       );
       return;
     }
     
+    // Защита от повторного скачивания
+    bool isDownloading = false;
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -93,72 +89,85 @@ mixin FileOperations {
 
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            Future.microtask(() async {
-              try {
-                final success = await ApiService.downloadFile(token, fileId, fileName);
+            if (!isDownloading && !isCompleted && !hasError) {
+              isDownloading = true;
+              Future.microtask(() async {
+                try {
+                  final success = await ApiService.downloadFile(token, fileId, fileName);
 
-                if (!dialogContext.mounted || !(this as dynamic).mounted) return;
+                  if (!dialogContext.mounted || !(this as dynamic).mounted) return;
 
-                if (success) {
-                  final dir = Directory('/storage/emulated/0/Download');
-                  File? foundFile;
-
-                  if (await dir.exists()) {
-                    final exactFile = File('${dir.path}/$fileName');
-                    if (await exactFile.exists()) {
-                      foundFile = exactFile;
+                  if (success) {
+                    if (kIsWeb) {
+                      // В веб-версии файл уже скачан через браузер
+                      setDialogState(() {
+                        isCompleted = true;
+                        progress = 1.0;
+                        savedPath = fileName; // просто для отображения
+                      });
                     } else {
-                      final fileList = dir.listSync()
-                          .whereType<File>()
-                          .where((f) {
-                            final name = f.uri.pathSegments.last;
-                            return name == fileName || name.startsWith(fileName.replaceAll(RegExp(r'\.[^.]+$'), '')) && name.endsWith(fileName.split('.').last);
-                          })
-                          .toList()
-                        ..sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+                      // Android: ищем файл в Download
+                      final dir = Directory('/storage/emulated/0/Download');
+                      File? foundFile;
 
-                      if (fileList.isNotEmpty) {
-                        foundFile = fileList.first;
+                      if (await dir.exists()) {
+                        final exactFile = File('${dir.path}/$fileName');
+                        if (await exactFile.exists()) {
+                          foundFile = exactFile;
+                        } else {
+                          final fileList = dir.listSync()
+                              .whereType<File>()
+                              .where((f) {
+                                final name = f.uri.pathSegments.last;
+                                return name == fileName || name.startsWith(fileName.replaceAll(RegExp(r'\.[^.]+$'), '')) && name.endsWith(fileName.split('.').last);
+                              })
+                              .toList()
+                            ..sort((a, b) => b.lastModifiedSync().compareTo(a.lastModifiedSync()));
+
+                          if (fileList.isNotEmpty) {
+                            foundFile = fileList.first;
+                          }
+                        }
                       }
-                    }
-                  }
 
-                  if (foundFile != null) {
-                    savedPath = foundFile.path;
-                    setDialogState(() {
-                      isCompleted = true;
-                      progress = 1.0;
-                    });
-                  } else {
-                    try {
-                      final appDir = await getApplicationDocumentsDirectory();
-                      if (await File('${appDir.path}/$fileName').exists()) {
-                        savedPath = '${appDir.path}/$fileName';
+                      if (foundFile != null) {
+                        savedPath = foundFile.path;
                         setDialogState(() {
                           isCompleted = true;
                           progress = 1.0;
                         });
                       } else {
-                        setDialogState(() => hasError = true);
+                        try {
+                          final appDir = await getApplicationDocumentsDirectory();
+                          if (await File('${appDir.path}/$fileName').exists()) {
+                            savedPath = '${appDir.path}/$fileName';
+                            setDialogState(() {
+                              isCompleted = true;
+                              progress = 1.0;
+                            });
+                          } else {
+                            setDialogState(() => hasError = true);
+                          }
+                        } catch (e) {
+                          setDialogState(() => hasError = true);
+                        }
                       }
-                    } catch (e) {
-                      setDialogState(() => hasError = true);
                     }
+                  } else {
+                    setDialogState(() => hasError = true);
                   }
-                } else {
-                  setDialogState(() => hasError = true);
+                } catch (e) {
+                  if (dialogContext.mounted) {
+                    setDialogState(() => hasError = true);
+                  }
                 }
-              } catch (e) {
-                if (dialogContext.mounted) {
-                  setDialogState(() => hasError = true);
-                }
-              }
-            });
+              });
+            }
 
             return AlertDialog(
               title: Row(
                 children: [
-                  Expanded(child: Text(hasError ? '❌ Ошибка' : (isCompleted ? '✅ Скачано' : 'Скачивание'))),
+                  Expanded(child: Text(hasError ? 'Ошибка' : (isCompleted ? 'Скачано' : 'Скачивание'))),
                   if (isCompleted || hasError)
                     IconButton(icon: Icon(Icons.close), onPressed: () => Navigator.pop(dialogContext)),
                 ],
@@ -180,9 +189,9 @@ mixin FileOperations {
                         child: ElevatedButton(
                           onPressed: () {
                             Navigator.pop(dialogContext);
-                            downloadFile(fileId, fileName, fileType);
+                            // Не вызываем рекурсивно, просто закрываем
                           },
-                          child: Text('Повторить'),
+                          child: Text('Закрыть'),
                         ),
                       ),
                     ] else if (!isCompleted) ...[
@@ -194,30 +203,36 @@ mixin FileOperations {
                       Icon(getIconForType(fileType), size: 48, color: Theme.of(context).colorScheme.primary),
                       SizedBox(height: 12),
                       Text(fileName, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-                      SizedBox(height: 12),
-                      GestureDetector(
-                        onTap: () async {
-                          if (savedPath != null) {
-                            await _openFile(savedPath!, fileType, context);
-                          }
-                        },
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(Icons.folder_open, size: 16, color: Colors.grey),
-                                SizedBox(width: 4),
-                                Expanded(
-                                  child: Text('Сохранён в Downloads', style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline, fontSize: 13)),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 4),
-                            Text('Нажмите, чтобы открыть', style: TextStyle(color: Colors.grey, fontSize: 11, fontStyle: FontStyle.italic)),
-                          ],
+                      if (!kIsWeb && savedPath != null) ...[
+                        SizedBox(height: 12),
+                        GestureDetector(
+                          onTap: () async {
+                            if (savedPath != null) {
+                              await _openFile(savedPath!, fileType, context);
+                            }
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.folder_open, size: 16, color: Colors.grey),
+                                  SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text('Сохранён в Downloads', style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline, fontSize: 13)),
+                                  ),
+                                ],
+                              ),
+                              SizedBox(height: 4),
+                              Text('Нажмите, чтобы открыть', style: TextStyle(color: Colors.grey, fontSize: 11, fontStyle: FontStyle.italic)),
+                            ],
+                          ),
                         ),
-                      ),
+                      ],
+                      if (kIsWeb) ...[
+                        SizedBox(height: 12),
+                        Text('Файл сохранён через браузер', style: TextStyle(color: Colors.green, fontSize: 13)),
+                      ],
                     ],
                   ],
                 ),
@@ -230,9 +245,10 @@ mixin FileOperations {
   }
 
   Future<void> _openFile(String path, String fileType, BuildContext context) async {
+    if (kIsWeb) return;
+    
     final type = fileType.toLowerCase();
     
-    // Для APK открываем через системный установщик
     if (type.contains('apk')) {
       try {
         final result = await OpenFile.open(
@@ -257,7 +273,6 @@ mixin FileOperations {
       }
     }
     
-    // Для всех остальных файлов
     try {
       final result = await OpenFile.open(path);
       if (result.type != ResultType.done) {
@@ -291,7 +306,7 @@ mixin FileOperations {
     final context = (this as dynamic).context as BuildContext;
     final canDelete = admin || ownerId == userId;
     if (!canDelete && (this as dynamic).mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Нет прав на удаление')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Нет прав на удаление')));
       return;
     }
     final confirm = await showDialog<bool>(
@@ -309,9 +324,9 @@ mixin FileOperations {
       final success = await ApiService.deleteFile(token, fileId);
       if (success && (this as dynamic).mounted) {
         (this as dynamic).loadContent();
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('✅ Файл удалён')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Файл удалён')));
       } else if ((this as dynamic).mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('❌ Ошибка удаления')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка удаления')));
       }
     }
   }
@@ -355,8 +370,8 @@ mixin FileOperations {
       builder: (context) => SimpleDialog(
         title: Text('Переместить "${file['original_name']}" в папку'),
         children: [
-          SimpleDialogOption(onPressed: () => Navigator.pop(context, null), child: Text('📁 Корень')),
-          ...allFolders.map((folder) => SimpleDialogOption(onPressed: () => Navigator.pop(context, folder['id']), child: Text('📁 ${folder['name']}'))),
+          SimpleDialogOption(onPressed: () => Navigator.pop(context, null), child: Text('Корень')),
+          ...allFolders.map((folder) => SimpleDialogOption(onPressed: () => Navigator.pop(context, folder['id']), child: Text(' ${folder['name']}'))),
         ],
       ),
     );
@@ -399,25 +414,17 @@ mixin FileOperations {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if ((this as dynamic).isImageType(file['file_type']))
+                // Превью только для Android
+                if (!kIsWeb && (this as dynamic).isImageType(file['file_type']))
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
                       height: 150,
                       width: 200,
                       color: Colors.grey.shade200,
-                      child: CachedNetworkImage(
-                        imageUrl: ApiService.thumbnailUrl(file['id']),
-                        httpHeaders: {
-                          'X-API-Token': token,
-                          'Host': 'gazonbaza.ru',
-                        },
-                        fit: BoxFit.contain,
-                        placeholder: (context, url) => Center(child: CircularProgressIndicator()),
-                        errorWidget: (context, url, error) => FileIcon(
-                          fileType: file['file_type'] ?? '',
-                          size: 60,
-                        ),
+                      child: FileIcon(
+                        fileType: file['file_type'] ?? '',
+                        size: 60,
                       ),
                     ),
                   )
@@ -459,7 +466,7 @@ mixin FileOperations {
                       Navigator.pop(context);
                       (this as dynamic).loadContent();
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(isPublic ? '🔒 Стал личным' : '🌍 Стал общим')),
+                        SnackBar(content: Text(isPublic ? 'Стал личным' : 'Стал общим')),
                       );
                     }
                   },
@@ -596,7 +603,7 @@ mixin FileOperations {
       if (shareUrl == null) {
         if ((this as dynamic).mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('❌ Не удалось создать ссылку')),
+            SnackBar(content: Text('Не удалось создать ссылку')),
           );
         }
         return;
