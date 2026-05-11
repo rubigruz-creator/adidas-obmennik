@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -11,81 +10,96 @@ mixin UploadOperations {
   String get token;
   int? get folderId;
 
-  Timer? uploadProgressTimer;
-
-  Future<void> uploadFileBytes(Uint8List bytes, String fileName, bool isPublic, {String? description}) async {
+  Future<void> _showUploadDialog(String fileName, Future<bool> Function() uploadTask) async {
     final context = (this as dynamic).context as BuildContext;
-    double progress = 0.0;
-    
-    uploadProgressTimer?.cancel();
-    uploadProgressTimer = Timer.periodic(Duration(milliseconds: 100), (timer) {
-      if (!(this as dynamic).mounted) { 
-        timer.cancel(); 
-        return; 
-      }
-      if (progress < 0.95) {
-        progress += 0.05;
-        if ((this as dynamic).mounted) {
-          (this as dynamic).setState(() {});
-        }
-      } else if (progress >= 0.95 && timer.isActive) {
-        timer.cancel();
-      }
-    });
-    
-    try {
-      // Напрямую вызываем API, передавая байты
-      final success = await ApiService.uploadFileBytes(
-        token, 
-        bytes, 
-        fileName, 
-        isPublic: isPublic, 
-        folderId: folderId, 
-        description: description
-      );
-      
-      uploadProgressTimer?.cancel();
-      uploadProgressTimer = null;
-      
-      if ((this as dynamic).mounted) {
-        if (success) {
-          progress = 1.0;
-          (this as dynamic).setState(() {});
-          (this as dynamic).loadContent();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ $fileName загружен!'),
-              backgroundColor: Colors.green,
-            )
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('❌ Ошибка загрузки файла'),
-              backgroundColor: Colors.red,
-            )
-          );
-        }
-      }
-    } catch (e) {
-      uploadProgressTimer?.cancel();
-      uploadProgressTimer = null;
-      
-      if ((this as dynamic).mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Ошибка: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          )
+    bool isCompleted = false;
+    bool hasError = false;
+    String? errorMessage;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        _startUpload(dialogContext, uploadTask, (completed, error, msg) {
+          isCompleted = completed;
+          hasError = error;
+          errorMessage = msg;
+        });
+
+        return AlertDialog(
+          title: Text(hasError ? '❌ Ошибка' : (isCompleted ? '✅ Загружено' : 'Загрузка...')),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!isCompleted && !hasError) ...[
+                LinearProgressIndicator(),
+                SizedBox(height: 16),
+                Text('Загрузка файла...'),
+                SizedBox(height: 8),
+                Text(fileName, style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+              if (isCompleted) ...[
+                Icon(Icons.check_circle, color: Colors.green, size: 48),
+                SizedBox(height: 12),
+                Text('$fileName загружен!'),
+              ],
+              if (hasError) ...[
+                Icon(Icons.error, color: Colors.red, size: 48),
+                SizedBox(height: 12),
+                Text(errorMessage ?? 'Неизвестная ошибка'),
+              ],
+              SizedBox(height: 12),
+              if (isCompleted || hasError)
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: Text('OK'),
+                ),
+            ],
+          ),
         );
-      }
+      },
+    );
+
+    if (isCompleted && (this as dynamic).mounted) {
+      Future.delayed(Duration(milliseconds: 500), () {
+        if ((this as dynamic).mounted) {
+          (this as dynamic).loadContent();
+        }
+      });
     }
   }
 
-  // Оставлено для обратной совместимости, но тоже использует байты
-  Future<void> uploadFile(File file, String fileName, bool isPublic, {String? description}) async {
-    final bytes = await file.readAsBytes();
-    await uploadFileBytes(bytes, fileName, isPublic, description: description);
+  void _startUpload(
+    BuildContext dialogContext,
+    Future<bool> Function() uploadTask,
+    void Function(bool completed, bool error, String? msg) onResult,
+  ) {
+    uploadTask().then((success) {
+      if (!dialogContext.mounted) return;
+      if (success) {
+        onResult(true, false, null);
+      } else {
+        onResult(false, true, 'Ошибка загрузки');
+      }
+      (dialogContext as Element).markNeedsBuild();
+    }).catchError((e) {
+      if (!dialogContext.mounted) return;
+      onResult(false, true, e.toString());
+      (dialogContext as Element).markNeedsBuild();
+    });
+  }
+
+  Future<void> uploadFileBytes(Uint8List bytes, String fileName, bool isPublic, {String? description}) async {
+    await _showUploadDialog(fileName, () async {
+      return await ApiService.uploadFileBytes(
+        token,
+        bytes,
+        fileName,
+        isPublic: isPublic,
+        folderId: folderId,
+        description: description,
+      );
+    });
   }
 
   Future<bool> showVisibilityDialog() async {
@@ -96,14 +110,8 @@ mixin UploadOperations {
         title: Text('Тип файла'),
         content: Text('Сделать файл доступным для всех?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false), 
-            child: Text('Личный')
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true), 
-            child: Text('Общий')
-          ),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Личный')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: Text('Общий')),
         ],
       ),
     ) ?? false;
@@ -122,119 +130,66 @@ mixin UploadOperations {
             controller: controller,
             maxLines: 3,
             maxLength: 300,
-            decoration: InputDecoration(
-              hintText: 'Не более 300 символов',
-              border: OutlineInputBorder(),
-            ),
+            decoration: InputDecoration(hintText: 'Не более 300 символов', border: OutlineInputBorder()),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, null),
-              child: Text('Пропустить'),
-            ),
-            TextButton(
-              onPressed: () {
-                final text = controller.text.trim();
-                Navigator.pop(ctx, text.isEmpty ? null : text);
-              },
-              child: Text('Сохранить'),
-            ),
+            TextButton(onPressed: () => Navigator.pop(ctx, null), child: Text('Пропустить')),
+            TextButton(onPressed: () {
+              final text = controller.text.trim();
+              Navigator.pop(ctx, text.isEmpty ? null : text);
+            }, child: Text('Сохранить')),
           ],
         );
       },
     );
-
     return result;
   }
 
   Future<void> pickAnyFile() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        allowMultiple: false,
-        type: FileType.any,
-      );
-      
+      FilePickerResult? result = await FilePicker.platform.pickFiles(allowMultiple: false, type: FileType.any);
       if (result == null || result.files.isEmpty) return;
-
       final pickedFile = result.files.first;
-      
-      if (pickedFile.size > 300 * 1024 * 1024) {
-        final context = (this as dynamic).context as BuildContext;
-        if ((this as dynamic).mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('❌ Файл слишком большой. Максимум 300 МБ'), backgroundColor: Colors.red)
-          );
-        }
-        return;
-      }
 
       Uint8List? bytes;
       if (kIsWeb) {
         bytes = pickedFile.bytes;
       } else {
-        if (pickedFile.path != null) {
-          bytes = await File(pickedFile.path!).readAsBytes();
-        }
+        if (pickedFile.path != null) bytes = await File(pickedFile.path!).readAsBytes();
       }
-      
       if (bytes == null || bytes.isEmpty) throw Exception('Не удалось прочитать файл');
 
       final description = await showDescriptionDialog();
       final isPublic = await showVisibilityDialog();
       await uploadFileBytes(bytes, pickedFile.name, isPublic, description: description);
-      
     } catch (e) {
-      print('❌ Ошибка при выборе файла: $e');
-      final context = (this as dynamic).context as BuildContext;
-      if ((this as dynamic).mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Ошибка: ${e.toString()}'), backgroundColor: Colors.red)
-        );
-      }
+      print('Ошибка при выборе файла: $e');
     }
   }
 
   Future<void> pickImageFromGallery() async {
     try {
-      final picker = ImagePicker();
-      final XFile? pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+      final XFile? pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery);
       if (pickedFile == null) return;
-
       final bytes = await pickedFile.readAsBytes();
       final description = await showDescriptionDialog();
       final isPublic = await showVisibilityDialog();
       await uploadFileBytes(bytes, pickedFile.name, isPublic, description: description);
-      
     } catch (e) {
-      print('❌ Ошибка при выборе изображения: $e');
-      final context = (this as dynamic).context as BuildContext;
-      if ((this as dynamic).mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Ошибка: ${e.toString()}'), backgroundColor: Colors.red)
-        );
-      }
+      print('Ошибка при выборе изображения: $e');
     }
   }
 
   Future<void> takePhoto() async {
     try {
-      final picker = ImagePicker();
-      final XFile? pickedFile = await picker.pickImage(source: ImageSource.camera, imageQuality: 85);
+      final XFile? pickedFile = await ImagePicker().pickImage(source: ImageSource.camera);
       if (pickedFile == null) return;
-
       final bytes = await pickedFile.readAsBytes();
       final description = await showDescriptionDialog();
       final isPublic = await showVisibilityDialog();
       await uploadFileBytes(bytes, pickedFile.name, isPublic, description: description);
-      
     } catch (e) {
-      print('❌ Ошибка при фотографировании: $e');
-      final context = (this as dynamic).context as BuildContext;
-      if ((this as dynamic).mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Ошибка: ${e.toString()}'), backgroundColor: Colors.red)
-        );
-      }
+      print('Ошибка при фотографировании: $e');
     }
   }
 }

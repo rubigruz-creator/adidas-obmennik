@@ -415,16 +415,28 @@ mixin FileOperations {
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Превью только для Android
-                if (!kIsWeb && (this as dynamic).isImageType(file['file_type']))
+                if ((this as dynamic).isImageType(file['file_type']))
                   ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
                       height: 150,
                       width: 200,
                       color: Colors.grey.shade200,
-                      child: FileIcon(
-                        fileType: file['file_type'] ?? '',
-                        size: 60,
+                      child: Image.network(
+                        ApiService.thumbnailUrl(file['id']),
+                        headers: {
+                          'X-API-Token': token,
+                          'Host': 'gazonbaza.ru',
+                        },
+                        fit: BoxFit.contain,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Center(child: CircularProgressIndicator());
+                        },
+                        errorBuilder: (context, error, stackTrace) => FileIcon(
+                          fileType: file['file_type'] ?? '',
+                          size: 60,
+                        ),
                       ),
                     ),
                   )

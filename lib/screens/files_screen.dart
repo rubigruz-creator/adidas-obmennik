@@ -70,7 +70,7 @@ class _FilesScreenState extends State<FilesScreen>
   void dispose() {
     debounceTimer?.cancel();
     _searchController.dispose();
-    uploadProgressTimer?.cancel();
+    // uploadProgressTimer?.cancel();
     super.dispose();
   }
 

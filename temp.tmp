@@ -20,6 +20,38 @@ N%u2OKt5
 
 
 
+🚀 ШАГ 1: Загрузить файлы (ПК):
+powershell
+scp -r "C:\Users\USER\my_api_app\build\web\*" rubi@90.156.171.36:/home/rubi/web/gazonbaza.ru/public_html/web/
+Введите пароль от rubi.
+
+🚀 ШАГ 2: Подключиться к серверу:
+powershell
+ssh root@90.156.171.36
+
+🚀 ШАГ 3: На сервере исправить права:
+bash
+chown -R rubi:www-data /home/rubi/web/gazonbaza.ru/public_html/web
+chmod -R 755 /home/rubi/web/gazonbaza.ru/public_html/web
+exit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ssh rubi@90.156.171.36 -t "cd /home/rubi/websocket_service && sudo -i"
 
 

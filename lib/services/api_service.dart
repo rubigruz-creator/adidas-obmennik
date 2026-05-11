@@ -3,13 +3,12 @@ import 'dart:io' show File, Directory;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
-
-// Web-специфичные импорты
 import 'dart:typed_data';
-import 'package:universal_html/html.dart' as html show AnchorElement, Blob, Url, document;
+import 'package:universal_html/html.dart' as html;
 
 class CancelToken {
   bool isCancelled = false;
+
   void cancel() {
     isCancelled = true;
   }
@@ -63,10 +62,8 @@ class ApiService {
     return content['files'];
   }
 
-
   // ============ ЗАГРУЗКА ФАЙЛА ============
 
-  /// Загрузка из объекта File (Android)
   static Future<bool> uploadFile(String token, File file, String fileName, {
     bool isPublic = false,
     int? folderId,
@@ -80,7 +77,6 @@ class ApiService {
     );
   }
 
-  /// Загрузка из байтов (веб и универсальный)
   static Future<bool> uploadFileBytes(String token, Uint8List bytes, String fileName, {
     bool isPublic = false,
     int? folderId,
@@ -91,7 +87,6 @@ class ApiService {
     request.headers['X-API-Token'] = token;
     request.headers['Host'] = _host;
 
-    // Всегда используем fromBytes, как в вебе, так и на Android
     request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
 
     request.fields['is_public'] = isPublic ? '1' : '0';
@@ -112,89 +107,56 @@ class ApiService {
           if (data['status'] == 'success') {
             return true;
           } else {
-            print('❌ Ошибка загрузки: ${data['message'] ?? response.body}');
+            print('Ошибка загрузки: ${data['message'] ?? response.body}');
             return false;
           }
         } catch (e) {
           return true;
         }
       } else {
-        print('❌ Ошибка загрузки. Статус: ${response.statusCode}');
+        print('Ошибка загрузки. Статус: ${response.statusCode}');
         return false;
       }
     } catch (e) {
-      print('❌ Исключение при загрузке: $e');
+      print('Исключение при загрузке: $e');
       return false;
     }
   }
 
-
-
-  // ============ СКАЧИВАНИЕ ФАЙЛА (КРОСПЛАТФОРМЕННОЕ) ============
+  // ============ СКАЧИВАНИЕ ФАЙЛА ============
 
   static Future<bool> downloadFile(String token, int fileId, String fileName) async {
     try {
-      print('📥 Начинаем скачивание файла ID: $fileId, имя: $fileName');
-      
       final url = Uri.parse('$_baseUrl/download.php?id=$fileId');
       final request = http.Request('GET', url);
       request.headers['X-API-Token'] = token;
       request.headers['Host'] = _host;
-      
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);
-
-      print('📥 Статус ответа: ${response.statusCode}');
-      print('📥 Content-Type: ${response.headers['content-type']}');
 
       if (response.statusCode == 200) {
         final contentType = response.headers['content-type'] ?? '';
         
-        // Проверяем, не вернул ли сервер JSON ошибку вместо файла
-        if (contentType.contains('application/json') || contentType.contains('text/html')) {
-          try {
-            // Пробуем распарсить как JSON
-            if (contentType.contains('application/json')) {
-              final data = jsonDecode(response.body);
-              print('❌ Сервер вернул JSON вместо файла: ${data}');
-              throw Exception(data['message'] ?? 'Ошибка при скачивании файла');
-            } else {
-              print('❌ Сервер вернул HTML/текст вместо файла');
-              throw Exception('Неверный тип ответа от сервера');
-            }
-          } catch (e) {
-            if (e is FormatException) {
-              // Если не JSON, просто логируем и продолжаем
-              print('⚠️ Ответ не JSON, пытаемся обработать как файл');
-            } else {
-              rethrow;
-            }
-          }
-        }
-
-        if (response.bodyBytes.isEmpty) {
-          throw Exception('Получен пустой файл');
+        if (contentType.contains('application/json')) {
+          final data = jsonDecode(response.body);
+          throw Exception(data['message'] ?? 'Ошибка при скачивании файла');
         }
 
         if (kIsWeb) {
-          print('📥 Скачивание для Web через Blob URL');
-          await _downloadFileWeb(response.bodyBytes, fileName, contentType);
+          _downloadFileWeb(response.bodyBytes, fileName);
           return true;
         } else {
-          print('📥 Сохранение файла на устройство');
           return await _saveFileAndroid(response.bodyBytes, fileName);
         }
       } else {
-        print('❌ Ошибка сервера: ${response.statusCode}');
         throw Exception('Ошибка сервера: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ Ошибка скачивания: $e');
+      print('Ошибка скачивания: $e');
       rethrow;
     }
   }
 
-  /// Сохранение файла на Android
   static Future<bool> _saveFileAndroid(Uint8List bytes, String fileName) async {
     try {
       final directory = Directory('/storage/emulated/0/Download');
@@ -214,62 +176,31 @@ class ApiService {
 
       final file = File(filePath);
       await file.writeAsBytes(bytes);
-      print('✅ Файл сохранен: $filePath');
       return true;
     } catch (e) {
-      print('❌ Ошибка сохранения в Download: $e');
-      try {
-        final directory = await getDownloadsDirectory();
-        if (directory != null) {
-          final file = File('${directory.path}/$fileName');
-          await file.writeAsBytes(bytes);
-          print('✅ Файл сохранен в альтернативную папку');
-          return true;
-        }
-      } catch (e2) {
-        print('❌ Ошибка сохранения в альтернативную папку: $e2');
+      final directory = await getDownloadsDirectory();
+      if (directory != null) {
+        final file = File('${directory.path}/$fileName');
+        await file.writeAsBytes(bytes);
+        return true;
       }
     }
     return false;
   }
 
-  /// Запуск скачивания в браузере через Blob URL
-  static Future<void> _downloadFileWeb(Uint8List bytes, String fileName, String mimeType) async {
-    try {
-      print('📥 Создаем Blob для файла размером ${bytes.length} байт');
-      
-      // Используем Blob и Object URL вместо base64
-      final blob = html.Blob(
-        [bytes],
-        mimeType.isNotEmpty ? mimeType : 'application/octet-stream',
-      );
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      
-      final anchor = html.AnchorElement(href: url)
-        ..setAttribute('download', fileName)
-        ..style.display = 'none';
-      
-      html.document.body?.append(anchor);
-      anchor.click();
-      
-      // Очистка через небольшую задержку
-      Future.delayed(Duration(milliseconds: 100), () {
-        try {
-          anchor.remove();
-        } catch (e) {
-          // Элемент уже удалён
-        }
-        html.Url.revokeObjectUrl(url);
-      });
-      
-      print('✅ Файл отправлен на скачивание в браузере');
-    } catch (e) {
-      print('❌ Ошибка при скачивании в веб: $e');
-      throw Exception('Не удалось скачать файл в браузере: $e');
-    }
+  static void _downloadFileWeb(Uint8List bytes, String fileName) {
+    final blob = html.Blob([bytes]);
+    final url = html.Url.createObjectUrlFromBlob(blob);
+    final anchor = html.AnchorElement(href: url)
+      ..setAttribute('download', fileName)
+      ..style.display = 'none';
+    html.document.body?.append(anchor);
+    anchor.click();
+    Future.delayed(Duration(milliseconds: 100), () {
+      anchor.remove();
+      html.Url.revokeObjectUrl(url);
+    });
   }
-
-
 
   // ============ ОСТАЛЬНЫЕ ОПЕРАЦИИ ============
 
@@ -468,34 +399,95 @@ class ApiService {
     bool isPublic = false,
     int? folderId,
     CancelToken? cancelToken,
+    String? description,
   }) async {
-    int step = 0;
-    final timer = Stream.periodic(Duration(milliseconds: 100), (_) {
-      if (cancelToken?.isCancelled == true) return;
-      step += 5;
-      if (step <= 90) {
-        onProgress(step / 100);
-      }
-    });
+    final bytes = await file.readAsBytes();
+    return await uploadFileBytesWithProgress(
+      token, 
+      bytes, 
+      fileName,
+      onProgress: onProgress,
+      isPublic: isPublic,
+      folderId: folderId,
+      cancelToken: cancelToken,
+      description: description,
+    );
+  }
 
-    final subscription = timer.listen((_) {});
+  static Future<bool> uploadFileBytesWithProgress(
+    String token,
+    Uint8List bytes,
+    String fileName, {
+    required Function(double) onProgress,
+    bool isPublic = false,
+    int? folderId,
+    CancelToken? cancelToken,
+    String? description,
+  }) async {
+    final url = Uri.parse('$_baseUrl/upload.php');
+    final request = http.MultipartRequest('POST', url);
+    request.headers['X-API-Token'] = token;
+    request.headers['Host'] = _host;
+
+    request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
+
+    request.fields['is_public'] = isPublic ? '1' : '0';
+    if (folderId != null) {
+      request.fields['folder_id'] = folderId.toString();
+    }
+    if (description != null && description.isNotEmpty) {
+      request.fields['description'] = description;
+    }
 
     try {
-      final result = await uploadFile(token, file, fileName,
-        isPublic: isPublic,
-        folderId: folderId,
-      );
-
+      // Отправляем с отслеживанием прогресса через стрим
+      final totalBytes = bytes.length;
+      int sentBytes = 0;
+      
+      // Создаём StreamedRequest для отслеживания
+      final streamedRequest = http.StreamedRequest('POST', url);
+      streamedRequest.headers.addAll(request.headers);
+      
+      // Отправляем в фоне
+      final sendFuture = streamedRequest.send();
+      
+      // Имитация прогресса (т.к. http пакет не даёт точного прогресса отправки)
+      int step = 0;
+      final timer = Stream.periodic(Duration(milliseconds: 100), (_) {
+        if (cancelToken?.isCancelled == true) return;
+        step += 5;
+        if (step <= 90) {
+          onProgress(step / 100);
+        }
+      });
+      
+      final subscription = timer.listen((_) {});
+      
+      final streamedResponse = await sendFuture;
       subscription.cancel();
-
-      if (result && (cancelToken?.isCancelled != true)) {
+      
+      final response = await http.Response.fromStream(streamedResponse);
+      
+      if (response.statusCode == 200) {
         onProgress(1.0);
+        try {
+          final data = jsonDecode(response.body);
+          if (data['status'] == 'success') {
+            return true;
+          } else {
+            print('Ошибка загрузки: ${data['message'] ?? response.body}');
+            return false;
+          }
+        } catch (e) {
+          return true;
+        }
+      } else {
+        print('Ошибка загрузки. Статус: ${response.statusCode}');
+        return false;
       }
-
-      return result;
     } catch (e) {
-      subscription.cancel();
-      rethrow;
+      print('Исключение при загрузке: $e');
+      return false;
     }
   }
 
@@ -535,13 +527,12 @@ class ApiService {
       final fullBytes = Uint8List.fromList(bytes);
 
       if (kIsWeb) {
-        await _downloadFileWeb(fullBytes, fileName, 'application/octet-stream');
+        _downloadFileWeb(fullBytes, fileName);
       } else {
         await _saveFileAndroid(fullBytes, fileName);
       }
       return true;
     } catch (e) {
-      print('❌ Ошибка при скачивании с прогрессом: $e');
       rethrow;
     }
   }
@@ -575,13 +566,12 @@ class ApiService {
       final fullBytes = Uint8List.fromList(bytes);
 
       if (kIsWeb) {
-        await _downloadFileWeb(fullBytes, fileName, 'application/octet-stream');
+        _downloadFileWeb(fullBytes, fileName);
       } else {
         await _saveFileAndroid(fullBytes, fileName);
       }
       return true;
     } catch (e) {
-      print('❌ Ошибка при простом скачивании: $e');
       return false;
     }
   }
@@ -589,7 +579,7 @@ class ApiService {
   // ============ ШЕРИНГ И ОТМЕТКИ ============
 
   static String thumbnailUrl(int fileId) => '$_baseUrl/download.php?id=$fileId&thumbnail=1';
-  
+
   static String downloadUrl(int fileId) => '$_baseUrl/download.php?id=$fileId';
 
   static Future<String?> getShareLink(String token, int fileId) async {
