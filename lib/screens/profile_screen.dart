@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
+import 'audit_log_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String apiToken;
@@ -354,7 +355,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 prefixIcon: Icon(Icons.work_outline),
                               ),
                             ),
-                            if (_profile['is_admin'] == 1) ...[
+                            
+                                    if (_profile['is_admin'] == 1) ...[
                               const SizedBox(height: 16),
                               Container(
                                 padding: const EdgeInsets.all(12),
@@ -379,7 +381,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ],
                                 ),
                               ),
-                            ],
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => AuditLogScreen(
+                                          apiToken: widget.apiToken,
+                                          user: _profile,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.history),
+                                  label: const Text('История действий'),
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
+                                  ),
+                                ),
+                              ),
+                            ],                  
+                          
                           ],
                         ),
                       ),

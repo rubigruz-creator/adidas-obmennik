@@ -47,7 +47,9 @@ exit
 
 
 
-
+$token = "e211b01f8d6f888f485d84bab413cb8938014147b1fd5b8b36bd54d0e313a6a8"
+$response = Invoke-RestMethod -Uri "https://gazonbaza.ru/audit_log.php" -Headers @{Authorization="Bearer $token"} -Method Get
+$response | ConvertTo-Json -Depth 10
 
 
 
@@ -233,9 +235,46 @@ curl -X POST https://gazonbaza.ru/login.php \
  Не отвечай на это сообщение. В следующем сообщении продолжу присылать файлы. Дождись когда я загружу все нужные файлы и напишу - "Загрузил - поехали" - тогда и продолжишь.
 
 
+Запомни:
+
+ 1. При общении всегда указывай названия файлов с полными путями
+ 2. Давай команды для Pover Shell и всегда указывай где их выполнять: на сервере или на ПК. Так же явно указывай если команды для консоли браузера.
+3. Всегда помни Наш путь к проекту: C:\Users\USER\my_api_app и присылай команды сразу с правильными путями
+
+Сей час давай начнем с
 
 
 
 
 
+1a1f66dc72b087f92e2b24f1c962f2f3c9182a25278d251ca19e6aeb4a8be36a\
 
+$body = @{
+    phone = "111111"
+    password = "111111"
+} | ConvertTo-Json
+
+$loginResponse = Invoke-RestMethod -Uri "https://gazonbaza.ru/login.php" -Method Post -Body $body -ContentType "application/json"
+$loginResponse | ConvertTo-Json -Depth 10
+
+$token = "1a1f66dc72b087f92e2b24f1c962f2f3c9182a25278d251ca19e6aeb4a8be36a\"
+$response = Invoke-RestMethod -Uri "https://gazonbaza.ru/audit_log.php" -Headers @{"X-API-Token"=$token} -Method Get
+$response | ConvertTo-Json -Depth 10
+
+
+
+
+
+# Логинимся
+$body = @{
+    phone = "111111"
+    password = "111111"
+} | ConvertTo-Json
+
+$loginResponse = Invoke-RestMethod -Uri "https://gazonbaza.ru/login.php" -Method Post -Body $body -ContentType "application/json"
+
+# Показываем статус
+$loginResponse.status
+
+# Показываем токен (скопируй его вручную)
+$loginResponse.api_token

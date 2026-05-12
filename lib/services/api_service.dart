@@ -603,4 +603,43 @@ class ApiService {
     final response = await _post(token, '/mark_viewed.php', {'file_id': fileId});
     return response.statusCode == 200;
   }
+
+
+  // ============ АУДИТ ДЕЙСТВИЙ (v5.6) ============
+
+  static Future<Map<String, dynamic>> getAuditLog(
+    String token, {
+    int? userId,
+    String? action,
+    String? dateFrom,
+    String? dateTo,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final params = <String, String>{
+      'limit': limit.toString(),
+      'offset': offset.toString(),
+    };
+    if (userId != null) params['user_id'] = userId.toString();
+    if (action != null) params['action'] = action;
+    if (dateFrom != null) params['date_from'] = dateFrom;
+    if (dateTo != null) params['date_to'] = dateTo;
+
+    final uri = Uri.parse('$_baseUrl/audit_log.php').replace(queryParameters: params);
+    final request = http.Request('GET', uri);
+    request.headers['X-API-Token'] = token;
+    request.headers['Host'] = _host;
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } else {
+      return {'success': false, 'error': 'HTTP ${response.statusCode}'};
+    }
+  }
+
+
+
 }
