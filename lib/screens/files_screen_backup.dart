@@ -16,12 +16,11 @@ import 'profile_screen.dart';
 import 'file_operations.dart';
 import 'folder_operations.dart';
 import 'upload_operations.dart';
+import '../utils/app_config.dart';
 
 enum ViewMode { grid, list }
 
 class FilesScreen extends StatefulWidget {
-  const FilesScreen({super.key});
-
   @override
   _FilesScreenState createState() => _FilesScreenState();
 }
@@ -301,11 +300,11 @@ class _FilesScreenState extends State<FilesScreen>
       builder: (context) => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ListTile(title: const Text('По дате'), leading: const Icon(Icons.date_range), onTap: () { setState(() { sortBy = 'date'; sortAsc = false; }); loadContent(); Navigator.pop(context); }),
-          ListTile(title: const Text('По имени'), leading: const Icon(Icons.sort_by_alpha), onTap: () { setState(() { sortBy = 'name'; sortAsc = true; }); loadContent(); Navigator.pop(context); }),
-          ListTile(title: const Text('По размеру'), leading: const Icon(Icons.data_usage), onTap: () { setState(() { sortBy = 'size'; sortAsc = false; }); loadContent(); Navigator.pop(context); }),
-          ListTile(title: const Text('По хозяину'), leading: const Icon(Icons.person), onTap: () { setState(() { sortBy = 'owner'; sortAsc = true; }); loadContent(); Navigator.pop(context); }),
-          ListTile(title: const Text('По типу (Общий/Личный)'), leading: const Icon(Icons.visibility), onTap: () { setState(() { sortBy = 'visibility'; sortAsc = false; }); loadContent(); Navigator.pop(context); }),
+          ListTile(title: Text('По дате'), leading: Icon(Icons.date_range), onTap: () { setState(() { sortBy = 'date'; sortAsc = false; }); loadContent(); Navigator.pop(context); }),
+          ListTile(title: Text('По имени'), leading: Icon(Icons.sort_by_alpha), onTap: () { setState(() { sortBy = 'name'; sortAsc = true; }); loadContent(); Navigator.pop(context); }),
+          ListTile(title: Text('По размеру'), leading: Icon(Icons.data_usage), onTap: () { setState(() { sortBy = 'size'; sortAsc = false; }); loadContent(); Navigator.pop(context); }),
+          ListTile(title: Text('По хозяину'), leading: Icon(Icons.person), onTap: () { setState(() { sortBy = 'owner'; sortAsc = true; }); loadContent(); Navigator.pop(context); }),
+          ListTile(title: Text('По типу (Общий/Личный)'), leading: Icon(Icons.visibility), onTap: () { setState(() { sortBy = 'visibility'; sortAsc = false; }); loadContent(); Navigator.pop(context); }),
         ],
       ),
     );
@@ -319,12 +318,12 @@ class _FilesScreenState extends State<FilesScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(leading: const Icon(Icons.create_new_folder), title: const Text('Создать папку'), onTap: () { Navigator.pop(context); createFolder(); }),
+            ListTile(leading: Icon(Icons.create_new_folder), title: Text('Создать папку'), onTap: () { Navigator.pop(context); createFolder(); }),
 
             // Заменено pickAnyFile() → pickMultipleFiles()
-            ListTile(leading: const Icon(Icons.attach_file), title: const Text('Загрузить файлы'), onTap: () { Navigator.pop(context); pickMultipleFiles(); }),
-            ListTile(leading: const Icon(Icons.photo_library), title: const Text('Фото из галереи'), onTap: () { Navigator.pop(context); pickImageFromGallery(); }),
-            ListTile(leading: const Icon(Icons.camera_alt), title: const Text('Фото с камеры'), onTap: () { Navigator.pop(context); takePhoto(); }),
+            ListTile(leading: Icon(Icons.attach_file), title: Text('Загрузить файлы'), onTap: () { Navigator.pop(context); pickMultipleFiles(); }),
+            ListTile(leading: Icon(Icons.photo_library), title: Text('Фото из галереи'), onTap: () { Navigator.pop(context); pickImageFromGallery(); }),
+            ListTile(leading: Icon(Icons.camera_alt), title: Text('Фото с камеры'), onTap: () { Navigator.pop(context); takePhoto(); }),
           ],
         ),
       ),
@@ -353,7 +352,7 @@ class _FilesScreenState extends State<FilesScreen>
 appBar: AppBar(
   leading: currentFolderId != null
       ? IconButton(
-          icon: const Icon(Icons.arrow_back),
+          icon: Icon(Icons.arrow_back),
           onPressed: _goToParentFolder,
           tooltip: 'Назад',
         )
@@ -383,7 +382,7 @@ appBar: AppBar(
           ),
           onChanged: (value) {
             debounceTimer?.cancel();
-            debounceTimer = Timer(const Duration(milliseconds: 300), () {
+            debounceTimer = Timer(Duration(milliseconds: 300), () {
               setState(() => _searchQuery = value);
               loadContent();
             });
@@ -423,12 +422,12 @@ appBar: AppBar(
               tooltip: viewMode == ViewMode.grid ? 'Список' : 'Сетка',
             ),
             IconButton(
-              icon: const Icon(Icons.sort),
+              icon: Icon(Icons.sort),
               onPressed: showSortMenu,
               tooltip: 'Сортировка',
             ),
             IconButton(
-              icon: const Icon(Icons.person),
+              icon: Icon(Icons.person),
               onPressed: () async {
                 final needRefresh = await Navigator.push(
                   context,
@@ -439,7 +438,7 @@ appBar: AppBar(
               tooltip: 'Профиль',
             ),
             IconButton(
-              icon: const Icon(Icons.logout),
+              icon: Icon(Icons.logout),
               onPressed: logout,
               tooltip: 'Выйти',
             ),
@@ -457,7 +456,7 @@ appBar: AppBar(
                 if (isSearching) ...[
                   // Первая строка: фильтры по типу
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     child: Wrap(
                       spacing: 6,
                       children: ['Все', 'image', 'pdf', 'doc', 'xls', 'archive', 'audio', 'video', 'text', 'code', 'apk'].map((type) {
@@ -467,11 +466,7 @@ appBar: AppBar(
                           selected: selected,
                           onSelected: (val) {
                             setState(() {
-                              if (type == 'Все') { typeFilters.clear(); } else { if (val) {
-                                typeFilters.add(type);
-                              } else {
-                                typeFilters.remove(type);
-                              } }
+                              if (type == 'Все') { typeFilters.clear(); } else { if (val) typeFilters.add(type); else typeFilters.remove(type); }
                             });
                             loadContent();
                           },
@@ -481,12 +476,12 @@ appBar: AppBar(
                   ),
                   // Вторая строка: атрибутные фильтры
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                     child: Wrap(
                       spacing: 6,
                       children: [
                         FilterChip(
-                          label: const Text('Свои'),
+                          label: Text('Свои'),
                           selected: attributeFilters.contains('mine'),
                           onSelected: (val) {
                             setState(() {
@@ -501,7 +496,7 @@ appBar: AppBar(
                           },
                         ),
                         FilterChip(
-                          label: const Text('Чужие'),
+                          label: Text('Чужие'),
                           selected: attributeFilters.contains('others'),
                           onSelected: (val) {
                             setState(() {
@@ -516,7 +511,7 @@ appBar: AppBar(
                           },
                         ),
                         FilterChip(
-                          label: const Text('Новые'),
+                          label: Text('Новые'),
                           selected: attributeFilters.contains('new'),
                           onSelected: (val) {
                             setState(() {
@@ -531,7 +526,7 @@ appBar: AppBar(
                           },
                         ),
                         FilterChip(
-                          label: const Text('Просмотренные'),
+                          label: Text('Просмотренные'),
                           selected: attributeFilters.contains('viewed'),
                           onSelected: (val) {
                             setState(() {
@@ -551,13 +546,13 @@ appBar: AppBar(
                 ],
                 Expanded(
                   child: isLoading
-                      ? const Center(child: CircularProgressIndicator())
+                      ? Center(child: CircularProgressIndicator())
                       : folders.isEmpty && files.isEmpty
-                          ? const EmptyState()
+                          ? EmptyState()
                           : RefreshIndicator(
                               onRefresh: loadContent,
                               child: AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 300),
+                                duration: Duration(milliseconds: 300),
                                 child: viewMode == ViewMode.grid ? buildGridView() : buildListView(),
                               ),
                             ),
@@ -572,7 +567,7 @@ appBar: AppBar(
                 heroTag: 'camera',
                 onPressed: takePhoto,
                 backgroundColor: Colors.red,
-                child: const Icon(Icons.camera_alt),
+                child: Icon(Icons.camera_alt),
               ),
             ),
           ],
@@ -580,8 +575,8 @@ appBar: AppBar(
         floatingActionButton: FloatingActionButton(
           heroTag: 'main',
           onPressed: showFABMenu,
+          child: Icon(Icons.add),
           tooltip: 'Добавить',
-          child: const Icon(Icons.add),
         ),
       ),
     );
@@ -590,8 +585,8 @@ appBar: AppBar(
   Widget buildGridView() {
     return GridView.builder(
       key: PageStorageKey('grid_${currentFolderId ?? 'root'}'),
-      padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, childAspectRatio: 0.85, crossAxisSpacing: 10, mainAxisSpacing: 10),
+      padding: EdgeInsets.all(12),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, childAspectRatio: 0.85, crossAxisSpacing: 10, mainAxisSpacing: 10),
       itemCount: folders.length + files.length,
       itemBuilder: (context, index) {
         if (index < folders.length) {
@@ -607,7 +602,7 @@ appBar: AppBar(
   Widget buildListView() {
     return ListView.builder(
       key: PageStorageKey('list_${currentFolderId ?? 'root'}'),
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: EdgeInsets.symmetric(vertical: 8),
       itemCount: folders.length + files.length,
       itemBuilder: (context, index) {
         if (index < folders.length) {
