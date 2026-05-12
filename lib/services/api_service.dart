@@ -245,6 +245,14 @@ class ApiService {
     return response.statusCode == 200;
   }
 
+  static Future<bool> moveFolder(String token, int folderId, int? targetFolderId) async {
+    final response = await _post(token, '/move_folder.php', {
+      'folder_id': folderId,
+      'target_folder_id': targetFolderId,
+    });
+    return response.statusCode == 200;
+  }
+
   static Future<bool> renameFolder(String token, int folderId, String newName) async {
     final response = await _post(token, '/rename_folder.php', {
       'id': folderId,

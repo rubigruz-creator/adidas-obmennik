@@ -49,6 +49,222 @@ class _FilesScreenState extends State<FilesScreen>
 
   Timer? debounceTimer;
 
+  // ─── Режим выбора (v5.5) ───────────────────────────────────────
+  bool isSelectionMode = false;
+  final Set<int> selectedItemIds = {};
+
+  /// Вход в режим выбора с уже выбранным элементом
+  void enterSelectionMode(int itemId) {
+    setState(() {
+      isSelectionMode = true;
+      selectedItemIds.clear();
+      selectedItemIds.add(itemId);
+    });
+  }
+
+  /// Выход из режима выбора
+  void exitSelectionMode() {
+    setState(() {
+      isSelectionMode = false;
+      selectedItemIds.clear();
+    });
+  }
+
+  /// Переключение выбора элемента
+  void toggleSelection(int itemId) {
+    setState(() {
+      if (selectedItemIds.contains(itemId)) {
+        selectedItemIds.remove(itemId);
+        // Если сняли последний — выходим из режима
+        if (selectedItemIds.isEmpty) {
+          isSelectionMode = false;
+        }
+      } else {
+        selectedItemIds.add(itemId);
+      }
+    });
+  }
+
+  /// Собрать выбранные файлы (для групповых операций)
+  List<dynamic> get _selectedFiles {
+    return files.where((f) => selectedItemIds.contains(f['id'])).toList();
+  }
+
+  /// Собрать выбранные папки
+  List<dynamic> get _selectedFolders {
+    return folders.where((f) => selectedItemIds.contains(f['id'])).toList();
+  }
+
+  /// Общее количество выбранных элементов
+  int get _selectedCount => selectedItemIds.length;
+
+  // ─── Групповое удаление ────────────────────────────────────────
+  Future<void> _deleteSelected() async {
+    final count = _selectedCount;
+    if (count == 0) return;
+
+    // Собираем все выбранные элементы (и файлы, и папки)
+    final selectedFiles = _selectedFiles;
+    final selectedFolders = _selectedFolders;
+    final totalItems = selectedFiles.length + selectedFolders.length;
+
+    // Диалог подтверждения
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Удалить выбранное?'),
+        content: Text('Вы уверены, что хотите удалить $totalItems элемент(ов)?\nЭто действие необратимо.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    // Показываем SnackBar с прогрессом
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Удаление $totalItems элемент(ов)...'), duration: const Duration(seconds: 10)),
+    );
+
+    int deleted = 0;
+    int errors = 0;
+
+    // Удаляем файлы
+    for (final file in selectedFiles) {
+      final fileId = file['id'] as int;
+      final success = await ApiService.deleteFile(apiToken, fileId);
+      if (success) {
+        deleted++;
+      } else {
+        errors++;
+      }
+    }
+
+    // Удаляем папки
+    for (final folder in selectedFolders) {
+      final folderId = folder['id'] as int;
+      final success = await ApiService.deleteFolder(apiToken, folderId);
+      if (success) {
+        deleted++;
+      } else {
+        errors++;
+      }
+    }
+
+    // Выходим из режима выбора и обновляем список
+    exitSelectionMode();
+    await loadContent();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errors > 0
+              ? 'Удалено: $deleted, ошибок: $errors'
+              : 'Удалено: $deleted'),
+          backgroundColor: errors > 0 ? Colors.orange : null,
+        ),
+      );
+    }
+  }
+
+  // ─── Групповое перемещение ─────────────────────────────────────
+  Future<void> _moveSelected() async {
+    final selectedFiles = _selectedFiles;
+    final selectedFolders = _selectedFolders;
+    final totalItems = selectedFiles.length + selectedFolders.length;
+    if (totalItems == 0) return;
+
+    // Получаем список всех папок для выбора целевой
+    final allFolders = await ApiService.getFolders(apiToken);
+
+    // Исключаем из списка выбранные папки (нельзя переместить папку в саму себя)
+    final availableFolders = allFolders.where((f) => !selectedItemIds.contains(f['id'])).toList();
+
+    // Диалог выбора целевой папки
+    final targetFolderId = await showDialog<int?>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: Text('Переместить $totalItems элемент(ов) в папку'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, null), // null = корень
+            child: const Text('📁 Корень'),
+          ),
+          ...availableFolders.map((folder) => SimpleDialogOption(
+            onPressed: () => Navigator.pop(ctx, folder['id'] as int?),
+            child: Text('📁 ${folder['name']}'),
+          )),
+        ],
+      ),
+    );
+
+    if (targetFolderId == null && targetFolderId != 0) {
+      // Пользователь закрыл диалог (null от SimpleDialog при закрытии)
+      // targetFolderId будет null, если нажали "Корень" — это ок.
+      // Но если просто закрыли — тоже null. Проверим через mounted.
+      return;
+    }
+
+    if (!mounted) return;
+
+    // Показываем прогресс
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Перемещение $totalItems элемент(ов)...'), duration: const Duration(seconds: 10)),
+    );
+
+    int moved = 0;
+    int errors = 0;
+
+    // Перемещаем файлы
+    for (final file in selectedFiles) {
+      final fileId = file['id'] as int;
+      final success = await ApiService.moveFile(apiToken, fileId, targetFolderId);
+      if (success) {
+        moved++;
+      } else {
+        errors++;
+      }
+    }
+
+    // Перемещаем папки
+    for (final folder in selectedFolders) {
+      final folderId = folder['id'] as int;
+      final success = await ApiService.moveFolder(apiToken, folderId, targetFolderId);
+      if (success) {
+        moved++;
+      } else {
+        errors++;
+      }
+    }
+
+    // Выходим из режима и обновляем
+    exitSelectionMode();
+    await loadContent();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errors > 0
+              ? 'Перемещено: $moved, ошибок: $errors'
+              : 'Перемещено: $moved'),
+          backgroundColor: errors > 0 ? Colors.orange : null,
+        ),
+      );
+    }
+  }
+
+  // ─── Существующие константы и переопределения ──────────────────
   static const String _viewModeKey = 'view_mode';
 
   @override
@@ -71,7 +287,6 @@ class _FilesScreenState extends State<FilesScreen>
   void dispose() {
     debounceTimer?.cancel();
     _searchController.dispose();
-    // uploadProgressTimer?.cancel();
     super.dispose();
   }
 
@@ -184,7 +399,6 @@ class _FilesScreenState extends State<FilesScreen>
   List<dynamic> _applyFiltersAndSorting(List<dynamic> fileList) {
     List<dynamic> result = fileList;
 
-    // 1. Фильтр по типу (старый)
     if (typeFilters.isNotEmpty) {
       result = result.where((f) {
         final type = (f['file_type'] ?? '').toLowerCase();
@@ -226,7 +440,6 @@ class _FilesScreenState extends State<FilesScreen>
       }).toList();
     }
 
-    // 2. Атрибутные фильтры (владелец, новизна)
     if (attributeFilters.contains('mine')) {
       result = result.where((f) => f['user_id'] == currentUserId).toList();
     }
@@ -320,8 +533,6 @@ class _FilesScreenState extends State<FilesScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(leading: const Icon(Icons.create_new_folder), title: const Text('Создать папку'), onTap: () { Navigator.pop(context); createFolder(); }),
-
-            // Заменено pickAnyFile() → pickMultipleFiles()
             ListTile(leading: const Icon(Icons.attach_file), title: const Text('Загрузить файлы'), onTap: () { Navigator.pop(context); pickMultipleFiles(); }),
             ListTile(leading: const Icon(Icons.photo_library), title: const Text('Фото из галереи'), onTap: () { Navigator.pop(context); pickImageFromGallery(); }),
             ListTile(leading: const Icon(Icons.camera_alt), title: const Text('Фото с камеры'), onTap: () { Navigator.pop(context); takePhoto(); }),
@@ -337,10 +548,129 @@ class _FilesScreenState extends State<FilesScreen>
     return t.contains('jpg') || t.contains('jpeg') || t.contains('png') || t.contains('webp') || t.contains('gif') || t.contains('bmp');
   }
 
-  @override
-  Widget build(BuildContext context) {
+  // ─── Сборка AppBar ─────────────────────────────────────────────
+  PreferredSizeWidget _buildAppBar() {
     final theme = Theme.of(context);
 
+    if (isSelectionMode) {
+      // AppBar режима выбора
+      return AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: exitSelectionMode,
+          tooltip: 'Отменить выбор',
+        ),
+        title: Text('Выбрано: $_selectedCount'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete),
+            onPressed: _selectedCount > 0 ? _deleteSelected : null,
+            tooltip: 'Удалить выбранное',
+          ),
+          IconButton(
+            icon: const Icon(Icons.drive_file_move),
+            onPressed: _selectedCount > 0 ? _moveSelected : null,
+            tooltip: 'Переместить выбранное',
+          ),
+        ],
+      );
+    }
+
+    // Обычный AppBar
+    return AppBar(
+      leading: currentFolderId != null
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: _goToParentFolder,
+              tooltip: 'Назад',
+            )
+          : (isSearching
+              ? null
+              : Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: SvgPicture.asset(
+                    'assets/logo/adidas_logo.svg',
+                    width: 32,
+                    height: 32,
+                    colorFilter: ColorFilter.mode(
+                      theme.colorScheme.onPrimary,
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                )),
+      title: isSearching
+          ? TextField(
+              controller: _searchController,
+              autofocus: true,
+              style: TextStyle(color: theme.colorScheme.onPrimary),
+              decoration: InputDecoration(
+                hintText: 'Поиск файлов...',
+                hintStyle: TextStyle(color: theme.colorScheme.onPrimary.withOpacity(0.5)),
+                border: InputBorder.none,
+              ),
+              onChanged: (value) {
+                debounceTimer?.cancel();
+                debounceTimer = Timer(const Duration(milliseconds: 300), () {
+                  setState(() => _searchQuery = value);
+                  loadContent();
+                });
+              },
+            )
+          : (folderPath.isEmpty ? null : Text(folderPath.last['name'])),
+      actions: [
+        IconButton(
+          icon: Icon(isSearching ? Icons.close : Icons.search),
+          onPressed: () {
+            setState(() {
+              if (isSearching) {
+                isSearching = false;
+                _searchController.clear();
+                _searchQuery = '';
+                typeFilters.clear();
+                attributeFilters.clear();
+                loadContent();
+              } else {
+                isSearching = true;
+                _searchQuery = '';
+              }
+            });
+          },
+        ),
+        if (!isSearching) ...[
+          IconButton(
+            icon: Icon(viewMode == ViewMode.grid ? Icons.list : Icons.grid_view),
+            onPressed: toggleViewMode,
+            tooltip: viewMode == ViewMode.grid ? 'Список' : 'Сетка',
+          ),
+          IconButton(
+            icon: const Icon(Icons.sort),
+            onPressed: showSortMenu,
+            tooltip: 'Сортировка',
+          ),
+          IconButton(
+            icon: const Icon(Icons.person),
+            onPressed: () async {
+              final needRefresh = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ProfileScreen(apiToken: apiToken)),
+              );
+              if (needRefresh == true && mounted) await loadContent();
+            },
+            tooltip: 'Профиль',
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: logout,
+            tooltip: 'Выйти',
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ─── Основной build ────────────────────────────────────────────
+  @override
+  Widget build(BuildContext context) {
     return PopScope(
       canPop: currentFolderId == null,
       onPopInvokedWithResult: (didPop, result) async {
@@ -349,105 +679,7 @@ class _FilesScreenState extends State<FilesScreen>
         }
       },
       child: Scaffold(
-
-appBar: AppBar(
-  leading: currentFolderId != null
-      ? IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: _goToParentFolder,
-          tooltip: 'Назад',
-        )
-      : (isSearching
-          ? null
-          : Padding(
-              padding: const EdgeInsets.all(12),
-              child: SvgPicture.asset(
-                'assets/logo/adidas_logo.svg',
-                width: 32,
-                height: 32,
-                colorFilter: ColorFilter.mode(
-                  theme.colorScheme.onPrimary,
-                  BlendMode.srcIn,
-                ),
-              ),
-            )),
-  title: isSearching
-      ? TextField(
-          controller: _searchController,
-          autofocus: true,
-          style: TextStyle(color: theme.colorScheme.onPrimary),
-          decoration: InputDecoration(
-            hintText: 'Поиск файлов...',
-            hintStyle: TextStyle(color: theme.colorScheme.onPrimary.withOpacity(0.5)),
-            border: InputBorder.none,
-          ),
-          onChanged: (value) {
-            debounceTimer?.cancel();
-            debounceTimer = Timer(const Duration(milliseconds: 300), () {
-              setState(() => _searchQuery = value);
-              loadContent();
-            });
-          },
-        )
-      : (folderPath.isEmpty
-          ? null
-          : Text(folderPath.last['name'])),
-  actions: [    
-
-
-
-          // Кнопка поиска/закрытия поиска
-          IconButton(
-            icon: Icon(isSearching ? Icons.close : Icons.search),
-            onPressed: () {
-              setState(() {
-                if (isSearching) {
-                  isSearching = false;
-                  _searchController.clear();
-                  _searchQuery = '';
-                  typeFilters.clear();
-                  attributeFilters.clear();
-                  loadContent();
-                } else {
-                  isSearching = true;
-                  _searchQuery = '';
-                }
-              });
-            },
-          ),
-          // Остальные кнопки видны только когда поиск НЕ активен
-          if (!isSearching) ...[
-            IconButton(
-              icon: Icon(viewMode == ViewMode.grid ? Icons.list : Icons.grid_view),
-              onPressed: toggleViewMode,
-              tooltip: viewMode == ViewMode.grid ? 'Список' : 'Сетка',
-            ),
-            IconButton(
-              icon: const Icon(Icons.sort),
-              onPressed: showSortMenu,
-              tooltip: 'Сортировка',
-            ),
-            IconButton(
-              icon: const Icon(Icons.person),
-              onPressed: () async {
-                final needRefresh = await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => ProfileScreen(apiToken: apiToken)),
-                );
-                if (needRefresh == true && mounted) await loadContent();
-              },
-              tooltip: 'Профиль',
-            ),
-            IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: logout,
-              tooltip: 'Выйти',
-            ),
-          ],
-        ],
-      ),
-
-
+        appBar: _buildAppBar(),
         body: Stack(
           children: [
             Column(
@@ -455,7 +687,6 @@ appBar: AppBar(
                 if (folderPath.isNotEmpty)
                   BreadcrumbChips(path: folderPath, onSelected: (folderId, index) { setState(() => currentFolderId = folderId); loadContent(); }),
                 if (isSearching) ...[
-                  // Первая строка: фильтры по типу
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     child: Wrap(
@@ -467,11 +698,7 @@ appBar: AppBar(
                           selected: selected,
                           onSelected: (val) {
                             setState(() {
-                              if (type == 'Все') { typeFilters.clear(); } else { if (val) {
-                                typeFilters.add(type);
-                              } else {
-                                typeFilters.remove(type);
-                              } }
+                              if (type == 'Все') { typeFilters.clear(); } else { if (val) { typeFilters.add(type); } else { typeFilters.remove(type); } }
                             });
                             loadContent();
                           },
@@ -479,7 +706,6 @@ appBar: AppBar(
                       }).toList(),
                     ),
                   ),
-                  // Вторая строка: атрибутные фильтры
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
                     child: Wrap(
@@ -490,12 +716,8 @@ appBar: AppBar(
                           selected: attributeFilters.contains('mine'),
                           onSelected: (val) {
                             setState(() {
-                              if (val) {
-                                attributeFilters.add('mine');
-                                attributeFilters.remove('others');
-                              } else {
-                                attributeFilters.remove('mine');
-                              }
+                              if (val) { attributeFilters.add('mine'); attributeFilters.remove('others'); }
+                              else { attributeFilters.remove('mine'); }
                             });
                             loadContent();
                           },
@@ -505,12 +727,8 @@ appBar: AppBar(
                           selected: attributeFilters.contains('others'),
                           onSelected: (val) {
                             setState(() {
-                              if (val) {
-                                attributeFilters.add('others');
-                                attributeFilters.remove('mine');
-                              } else {
-                                attributeFilters.remove('others');
-                              }
+                              if (val) { attributeFilters.add('others'); attributeFilters.remove('mine'); }
+                              else { attributeFilters.remove('others'); }
                             });
                             loadContent();
                           },
@@ -520,12 +738,8 @@ appBar: AppBar(
                           selected: attributeFilters.contains('new'),
                           onSelected: (val) {
                             setState(() {
-                              if (val) {
-                                attributeFilters.add('new');
-                                attributeFilters.remove('viewed');
-                              } else {
-                                attributeFilters.remove('new');
-                              }
+                              if (val) { attributeFilters.add('new'); attributeFilters.remove('viewed'); }
+                              else { attributeFilters.remove('new'); }
                             });
                             loadContent();
                           },
@@ -535,12 +749,8 @@ appBar: AppBar(
                           selected: attributeFilters.contains('viewed'),
                           onSelected: (val) {
                             setState(() {
-                              if (val) {
-                                attributeFilters.add('viewed');
-                                attributeFilters.remove('new');
-                              } else {
-                                attributeFilters.remove('viewed');
-                              }
+                              if (val) { attributeFilters.add('viewed'); attributeFilters.remove('new'); }
+                              else { attributeFilters.remove('viewed'); }
                             });
                             loadContent();
                           },
@@ -564,46 +774,92 @@ appBar: AppBar(
                 ),
               ],
             ),
-            // Кнопка камеры в левом нижнем углу
-            Positioned(
-              left: 16,
-              bottom: 46,
-              child: FloatingActionButton(
-                heroTag: 'camera',
-                onPressed: takePhoto,
-                backgroundColor: Colors.red,
-                child: const Icon(Icons.camera_alt),
+            if (!isSelectionMode)
+              Positioned(
+                left: 16,
+                bottom: 46,
+                child: FloatingActionButton(
+                  heroTag: 'camera',
+                  onPressed: takePhoto,
+                  backgroundColor: Colors.red,
+                  child: const Icon(Icons.camera_alt),
+                ),
               ),
-            ),
           ],
         ),
-        floatingActionButton: FloatingActionButton(
-          heroTag: 'main',
-          onPressed: showFABMenu,
-          tooltip: 'Добавить',
-          child: const Icon(Icons.add),
-        ),
+        floatingActionButton: isSelectionMode
+            ? null
+            : FloatingActionButton(
+                heroTag: 'main',
+                onPressed: showFABMenu,
+                tooltip: 'Добавить',
+                child: const Icon(Icons.add),
+              ),
       ),
     );
   }
 
+  // ─── GridView с поддержкой выбора ──────────────────────────────
   Widget buildGridView() {
     return GridView.builder(
       key: PageStorageKey('grid_${currentFolderId ?? 'root'}'),
       padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, childAspectRatio: 0.85, crossAxisSpacing: 10, mainAxisSpacing: 10),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 0.85,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+      ),
       itemCount: folders.length + files.length,
       itemBuilder: (context, index) {
         if (index < folders.length) {
-          return FolderCard(folder: folders[index], onTap: () { setState(() => currentFolderId = folders[index]['id']); loadContent(); }, onLongPress: () => showFolderMenu(folders[index]));
+          final folder = folders[index];
+          final folderId = folder['id'] as int;
+          return FolderCard(
+            folder: folder,
+            isSelectionMode: isSelectionMode,
+            isSelected: selectedItemIds.contains(folderId),
+            onTap: () {
+              if (isSelectionMode) {
+                toggleSelection(folderId);
+              } else {
+                setState(() => currentFolderId = folderId);
+                loadContent();
+              }
+            },
+            onLongPress: () {
+              if (!isSelectionMode) {
+                enterSelectionMode(folderId);
+              }
+            },
+          );
         } else {
           final file = files[index - folders.length];
-          return FileCard(file: file, onTap: () => showFileMenu(file), onLongPress: () => showFileMenu(file), apiToken: apiToken);
+          final fileId = file['id'] as int;
+          return FileCard(
+            file: file,
+            apiToken: apiToken,
+            isSelectionMode: isSelectionMode,
+            isSelected: selectedItemIds.contains(fileId),
+            onTap: () {
+              if (isSelectionMode) {
+                toggleSelection(fileId);
+              } else {
+                showFileMenu(file);
+              }
+            },
+            onLongPress: () {
+              if (!isSelectionMode) {
+                enterSelectionMode(fileId);
+              }
+            },
+          );
         }
       },
     );
   }
 
+  // ─── ListView с поддержкой выбора ──────────────────────────────
   Widget buildListView() {
     return ListView.builder(
       key: PageStorageKey('list_${currentFolderId ?? 'root'}'),
@@ -611,10 +867,46 @@ appBar: AppBar(
       itemCount: folders.length + files.length,
       itemBuilder: (context, index) {
         if (index < folders.length) {
-          return FolderListTile(folder: folders[index], onTap: () { setState(() => currentFolderId = folders[index]['id']); loadContent(); }, onLongPress: () => showFolderMenu(folders[index]));
+          final folder = folders[index];
+          final folderId = folder['id'] as int;
+          return FolderListTile(
+            folder: folder,
+            isSelectionMode: isSelectionMode,
+            isSelected: selectedItemIds.contains(folderId),
+            onTap: () {
+              if (isSelectionMode) {
+                toggleSelection(folderId);
+              } else {
+                setState(() => currentFolderId = folderId);
+                loadContent();
+              }
+            },
+            onLongPress: () {
+              if (!isSelectionMode) {
+                enterSelectionMode(folderId);
+              }
+            },
+          );
         } else {
           final file = files[index - folders.length];
-          return FileListTile(file: file, onTap: () => showFileMenu(file), onLongPress: () => showFileMenu(file));
+          final fileId = file['id'] as int;
+          return FileListTile(
+            file: file,
+            isSelectionMode: isSelectionMode,
+            isSelected: selectedItemIds.contains(fileId),
+            onTap: () {
+              if (isSelectionMode) {
+                toggleSelection(fileId);
+              } else {
+                showFileMenu(file);
+              }
+            },
+            onLongPress: () {
+              if (!isSelectionMode) {
+                enterSelectionMode(fileId);
+              }
+            },
+          );
         }
       },
     );

@@ -14,12 +14,18 @@ class FileCard extends StatefulWidget {
   final VoidCallback? onLongPress;
   final String apiToken;
 
+  // ─── Новые поля для режима выбора ─────────────────────────────
+  final bool isSelectionMode;
+  final bool isSelected;
+
   const FileCard({
     Key? key,
     required this.file,
     required this.onTap,
     this.onLongPress,
     required this.apiToken,
+    this.isSelectionMode = false,
+    this.isSelected = false,
   }) : super(key: key);
 
   @override
@@ -48,12 +54,10 @@ class _FileCardState extends State<FileCard> {
 
     try {
       final url = ApiService.thumbnailUrl(widget.file['id']);
-      
+
       if (kIsWeb) {
-        // Для веб-версии используем специальный подход
         await _loadThumbnailWeb(url);
       } else {
-        // Для Android используем стандартный http запрос
         await _loadThumbnailMobile(url);
       }
     } catch (e) {
@@ -71,18 +75,18 @@ class _FileCardState extends State<FileCard> {
       final request = http.Request('GET', Uri.parse(url));
       request.headers['X-API-Token'] = widget.apiToken;
       request.headers['Host'] = 'gazonbaza.ru';
-      
+
       final streamedResponse = await client.send(request);
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
         final contentType = response.headers['content-type'] ?? '';
-        
+
         if (contentType.contains('application/json')) {
           final data = jsonDecode(response.body);
           throw Exception(data['message'] ?? 'Ошибка загрузки превью');
         }
-        
+
         setState(() {
           _thumbnailBytes = response.bodyBytes;
           _isLoadingThumbnail = false;
@@ -98,7 +102,6 @@ class _FileCardState extends State<FileCard> {
       });
     }
   }
-
 
   Future<void> _loadThumbnailMobile(String url) async {
     try {
@@ -106,18 +109,18 @@ class _FileCardState extends State<FileCard> {
       final request = http.Request('GET', Uri.parse(url));
       request.headers['X-API-Token'] = widget.apiToken;
       request.headers['Host'] = 'gazonbaza.ru';
-      
+
       final streamedResponse = await client.send(request);
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 200) {
         final contentType = response.headers['content-type'] ?? '';
-        
+
         if (contentType.contains('application/json')) {
           final data = jsonDecode(response.body);
           throw Exception(data['message'] ?? 'Ошибка загрузки превью');
         }
-        
+
         setState(() {
           _thumbnailBytes = response.bodyBytes;
           _isLoadingThumbnail = false;
@@ -133,7 +136,6 @@ class _FileCardState extends State<FileCard> {
       });
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -145,7 +147,12 @@ class _FileCardState extends State<FileCard> {
 
     return Card(
       elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: widget.isSelected
+            ? BorderSide(color: Theme.of(context).colorScheme.primary, width: 2.5)
+            : BorderSide.none,
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: widget.onTap,
@@ -189,7 +196,33 @@ class _FileCardState extends State<FileCard> {
                 ],
               ),
             ),
-            if (isNew)
+
+            // ─── Чекбокс в режиме выбора ─────────────────────────
+            if (widget.isSelectionMode)
+              Positioned(
+                top: 6,
+                left: 6,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: widget.isSelected
+                        ? Theme.of(context).colorScheme.primary
+                        : Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: widget.isSelected
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.grey.shade400,
+                      width: 2,
+                    ),
+                  ),
+                  child: widget.isSelected
+                      ? Icon(Icons.check, size: 18, color: Colors.white)
+                      : SizedBox(width: 18, height: 18),
+                ),
+              ),
+
+            // Зелёный индикатор нового файла (только вне режима выбора)
+            if (isNew && !widget.isSelectionMode)
               Positioned(
                 top: 6,
                 right: 6,
@@ -236,7 +269,6 @@ class _FileCardState extends State<FileCard> {
       );
     }
 
-    // Показываем иконку файла если не удалось загрузить превью
     return Container(
       width: 80,
       height: 60,
