@@ -157,7 +157,6 @@ mixin UploadOperations {
   }
 
   Future<void> pickMultipleFiles() async {
-    debugPrint('=== pickMultipleFiles: START ===');
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(allowMultiple: true, type: FileType.any);
       if (result == null || result.files.isEmpty) return;
@@ -202,20 +201,18 @@ mixin UploadOperations {
     if ((this as dynamic).mounted) (this as dynamic).loadContent();
   }
 
+
   void _startSingleMultiUpload(UploadTask task, BuildContext dialogContext) {
-    debugPrint('_startSingleMultiUpload: START for ${task.fileName}');
     ApiService.uploadFileBytes(
       token, task.bytes, task.fileName,
       isPublic: task.isPublic, folderId: folderId, description: task.description,
     ).then((success) {
-      debugPrint('_startSingleMultiUpload: DONE ${task.fileName}, success = $success');
       if (!dialogContext.mounted) return;
       task.isCompleted = true;
       task.progress = 1.0;
       if (!success) { task.hasError = true; task.errorMessage = 'Ошибка загрузки'; }
       (dialogContext as Element).markNeedsBuild();
     }).catchError((e) {
-      debugPrint('_startSingleMultiUpload: ERROR ${task.fileName} = $e');
       if (!dialogContext.mounted) return;
       task.isCompleted = true;
       task.hasError = true;
