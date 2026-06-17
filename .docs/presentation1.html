@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>АДИДАС: Презентация корпоративного файлообменника</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --red: #EF3340;
+            --black: #000000;
+            --white: #FFFFFF;
+            --dark-bg: #121212;
+            --card-bg: #1E1E1E;
+            --text: #E0E0E0;
+            --text-secondary: #B0B0B0;
+            --green: #4CAF50;
+            --teal: #00BCD4;
+            --blue: #2196F3;
+            --orange: #FF9800;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--black);
+            color: var(--white);
+            overflow: hidden;
+        }
+
+        .presentation {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        .slide {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.6s ease, transform 0.6s ease;
+            transform: translateX(100px);
+            pointer-events: none;
+            padding: 60px;
+            overflow-y: auto;
+        }
+
+        .slide.active {
+            opacity: 1;
+            transform: translateX(0);
+            pointer-events: all;
+        }
+
+        .slide.prev {
+            transform: translateX(-100px);
+        }
+
+        /* Титульный слайд */
+        #slide-1 {
+            background: linear-gradient(135deg, #000000 0%, #1a1a1a 50%, var(--red) 150%);
+        }
+
+        .title-badge {
+            background: var(--red);
+            color: white;
+            padding: 12px 40px;
+            font-size: 18px;
+            font-weight: 900;
+            letter-spacing: 8px;
+            text-transform: uppercase;
+            margin-bottom: 30px;
+            border-radius: 4px;
+        }
+
+        .main-title {
+            font-size: 72px;
+            font-weight: 900;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+        }
+
+        .subtitle {
+            font-size: 28px;
+            font-weight: 300;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+
+        .date-badge {
+            font-size: 16px;
+            color: var(--text-secondary);
+            letter-spacing: 2px;
+        }
+
+        /* Слайды с контентом */
+        .slide-content {
+            max-width: 900px;
+            width: 100%;
+            text-align: left;
+        }
+
+        .slide-title {
+            font-size: 42px;
+            font-weight: 900;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 4px solid var(--red);
+            display: inline-block;
+        }
+
+        .problem-list, .solution-list {
+            list-style: none;
+        }
+
+        .problem-list li, .solution-list li {
+            font-size: 22px;
+            padding: 12px 0;
+            padding-left: 40px;
+            position: relative;
+            line-height: 1.5;
+        }
+
+        .problem-list li::before {
+            content: '❌';
+            position: absolute;
+            left: 0;
+        }
+
+        .solution-list li::before {
+            position: absolute;
+            left: 0;
+            font-size: 24px;
+        }
+
+        /* Таблицы */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th, td {
+            padding: 16px 20px;
+            text-align: left;
+            border-bottom: 1px solid #333;
+        }
+
+        th {
+            background: var(--red);
+            color: white;
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        td {
+            font-size: 18px;
+        }
+
+        tr:hover td {
+            background: var(--card-bg);
+        }
+
+        .check {
+            color: var(--green);
+            font-weight: bold;
+        }
+
+        /* Карточки преимуществ */
+        .advantage-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .advantage-card {
+            background: var(--card-bg);
+            padding: 30px 20px;
+            border-radius: 12px;
+            text-align: center;
+            border: 2px solid transparent;
+            transition: border-color 0.3s;
+        }
+
+        .advantage-card:hover {
+            border-color: var(--red);
+        }
+
+        .advantage-card .emoji {
+            font-size: 48px;
+            display: block;
+            margin-bottom: 15px;
+        }
+
+        .advantage-card .title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .advantage-card .desc {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        /* Дорожная карта */
+        .roadmap {
+            margin-top: 20px;
+        }
+
+        .roadmap-item {
+            padding: 16px 0;
+            border-left: 3px solid #333;
+            padding-left: 30px;
+            position: relative;
+        }
+
+        .roadmap-item.done {
+            border-left-color: var(--green);
+        }
+
+        .roadmap-item.planned {
+            border-left-color: var(--orange);
+        }
+
+        .roadmap-item::before {
+            content: '';
+            position: absolute;
+            left: -8px;
+            top: 20px;
+            width: 13px;
+            height: 13px;
+            border-radius: 50%;
+        }
+
+        .roadmap-item.done::before {
+            background: var(--green);
+        }
+
+        .roadmap-item.planned::before {
+            background: var(--orange);
+        }
+
+        .roadmap-item .version {
+            font-weight: 700;
+            color: var(--red);
+            margin-right: 10px;
+        }
+
+        /* Экосистема */
+        .ecosystem-flow {
+            text-align: center;
+            font-size: 24px;
+            line-height: 2.5;
+        }
+
+        .ecosystem-flow .arrow {
+            color: var(--red);
+            font-size: 36px;
+        }
+
+        .ecosystem-flow .box {
+            background: var(--card-bg);
+            padding: 15px 30px;
+            border-radius: 8px;
+            border: 2px solid var(--red);
+            display: inline-block;
+        }
+
+        /* Заключение */
+        .quote {
+            font-size: 32px;
+            font-style: italic;
+            color: var(--text-secondary);
+            border-left: 5px solid var(--red);
+            padding-left: 30px;
+            margin: 30px 0;
+        }
+
+        /* Навигация */
+        .nav {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+            z-index: 100;
+            background: rgba(0,0,0,0.8);
+            padding: 12px 20px;
+            border-radius: 50px;
+            backdrop-filter: blur(10px);
+        }
+
+        .nav-btn {
+            background: var(--card-bg);
+            color: white;
+            border: 2px solid #444;
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            cursor: pointer;
+            font-size: 20px;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-btn:hover {
+            background: var(--red);
+            border-color: var(--red);
+        }
+
+        .nav-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #444;
+            cursor: pointer;
+            transition: all 0.3s;
+            align-self: center;
+        }
+
+        .nav-dot.active {
+            background: var(--red);
+            width: 14px;
+            height: 14px;
+            box-shadow: 0 0 10px var(--red);
+        }
+
+        .slide-counter {
+            position: fixed;
+            top: 30px;
+            right: 30px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            z-index: 100;
+            background: rgba(0,0,0,0.6);
+            padding: 8px 16px;
+            border-radius: 20px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .status-done {
+            background: rgba(76,175,80,0.2);
+            color: var(--green);
+        }
+
+        .status-planned {
+            background: rgba(255,152,0,0.2);
+            color: var(--orange);
+        }
+
+        @media (max-width: 768px) {
+            .slide { padding: 30px; }
+            .main-title { font-size: 40px; }
+            .slide-title { font-size: 28px; }
+            .advantage-grid { grid-template-columns: 1fr; }
+            table { font-size: 14px; }
+            th, td { padding: 10px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="presentation" id="presentation">
+    
+    <!-- Слайд 1: Титульный -->
+    <div class="slide active" id="slide-1" style="text-align: center;">
+        <div class="title-badge">АДИДАС</div>
+        <div class="main-title">Наш обменник</div>
+        <div class="subtitle">Корпоративный файлообменник нового поколения</div>
+        <div class="date-badge">Май 2026</div>
+    </div>
+
+    <!-- Слайд 2: Проблема -->
+    <div class="slide" id="slide-2">
+        <div class="slide-content">
+            <div class="slide-title">❌ Текущие проблемы</div>
+            <ul class="problem-list">
+                <li>Файлы разбросаны по чатам (WhatsApp, Telegram)</li>
+                <li>Документы теряются в переписке</li>
+                <li>Нет контроля доступа к конфиденциальным файлам</li>
+                <li>Нельзя найти файл месячной давности</li>
+                <li>Отсутствует структура хранения</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Слайд 3: Решение -->
+    <div class="slide" id="slide-3">
+        <div class="slide-content">
+            <div class="slide-title">✅ АДИДАС — решение</div>
+            <ul class="solution-list">
+                <li>🗂️ <strong>Структура папок</strong> — порядок и навигация</li>
+                <li>🔍 <strong>Мгновенный поиск</strong> — найди файл за секунду</li>
+                <li>🔐 <strong>Контроль доступа</strong> — личные и общие файлы</li>
+                <li>📱 <strong>Мобильность</strong> — доступ с телефона всегда</li>
+                <li>⚡ <strong>Быстрый обмен</strong> — временные ссылки на 7 дней</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Слайд 4: Архитектура -->
+    <div class="slide" id="slide-4">
+        <div class="slide-content">
+            <div class="slide-title">🖥️ Серверная инфраструктура</div>
+            <table>
+                <tr><th>Компонент</th><th>Технология</th></tr>
+                <tr><td>Сервер</td><td>VPS (BeGet)</td></tr>
+                <tr><td>Домен</td><td>gazonbaza.ru</td></tr>
+                <tr><td>Веб-сервер</td><td>Nginx + Apache2</td></tr>
+                <tr><td>База данных</td><td>MariaDB</td></tr>
+                <tr><td>API</td><td>PHP 8.1 (REST JSON)</td></tr>
+                <tr><td>Безопасность</td><td>SSL (Let's Encrypt), токены</td></tr>
+                <tr><td>Уведомления</td><td>WebSocket (Node.js)</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- Слайд 5: Мобильное приложение -->
+    <div class="slide" id="slide-5">
+        <div class="slide-content">
+            <div class="slide-title">📱 Android-приложение (Flutter)</div>
+            <table>
+                <tr><th>Возможность</th><th>Статус</th></tr>
+                <tr><td>Регистрация и вход</td><td><span class="check">✅</span></td></tr>
+                <tr><td>Папки (CRUD)</td><td><span class="check">✅</span></td></tr>
+                <tr><td>Загрузка/скачивание файлов</td><td><span class="check">✅</span></td></tr>
+                <tr><td>Поиск и фильтры</td><td><span class="check">✅</span></td></tr>
+                <tr><td>Общие и личные файлы</td><td><span class="check">✅</span></td></tr>
+                <tr><td>Временные ссылки</td><td><span class="check">✅</span></td></tr>
+                <tr><td>Push-уведомления</td><td><span class="check">✅</span></td></tr>
+                <tr><td>PIN-код блокировки</td><td><span class="check">✅</span></td></tr>
+                <tr><td>Тёмная тема</td><td><span class="check">✅</span></td></tr>
+                <tr><td>Камера и галерея</td><td><span class="check">✅</span></td></tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- Слайд 6: Веб-версия -->
+    <div class="slide" id="slide-6">
+        <div class="slide-content">
+            <div class="slide-title">🌐 Веб-версия</div>
+            <ul class="solution-list" style="font-size: 24px; line-height: 2;">
+                <li>💻 Адаптивный дизайн — компьютер, планшет, телефон</li>
+                <li>📋 Тот же функционал — всё, что в приложении</li>
+                <li>🚀 Без установки — открыл и работаешь</li>
+                <li>☁️ Единая база — файлы синхронизированы</li>
+                <li>🔗 Доступ: <strong style="color: var(--red);">gazonbaza.ru/app</strong></li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Слайд 7: Брендинг -->
+    <div class="slide" id="slide-7">
+        <div class="slide-content" style="text-align: center;">
+            <div class="slide-title" style="margin-left: auto; margin-right: auto;">🎨 Стиль АДИДАС</div>
+            <div style="display: flex; justify-content: center; gap: 30px; flex-wrap: wrap; margin-top: 40px;">
+                <div style="background: var(--red); padding: 30px 50px; border-radius: 12px; font-size: 24px; font-weight: 700;">
+                    ████ #EF3340
+                </div>
+                <div style="background: var(--black); padding: 30px 50px; border-radius: 12px; font-size: 24px; font-weight: 700; border: 2px solid white;">
+                    ████ #000000
+                </div>
+            </div>
+            <div style="margin-top: 40px; text-align: left; display: inline-block;">
+                <p style="font-size: 22px; margin: 15px 0;">🎯 Material 3 — современный дизайн Google</p>
+                <p style="font-size: 22px; margin: 15px 0;">✨ Анимированный логотип</p>
+                <p style="font-size: 22px; margin: 15px 0;">📱 Интуитивный интерфейс</p>
+                <p style="font-size: 22px; margin: 15px 0;">🌙 Поддержка тёмной темы</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Слайд 8: Дорожная карта -->
+    <div class="slide" id="slide-8">
+        <div class="slide-content">
+            <div class="slide-title">🗺️ Дорожная карта</div>
+            <div class="roadmap">
+                <div class="roadmap-item done">
+                    <span class="version">v1.0 → v5.1</span>
+                    <span class="status-badge status-done">Готово</span>
+                    <p style="margin-top: 8px; color: var(--text-secondary);">
+                        Базовая загрузка • Папки • Push-уведомления • Поиск • Обмен ссылками • Брендинг • PIN-код • Splash Screen
+                    </p>
+                </div>
+                <div class="roadmap-item done">
+                    <span class="version">v5.2</span>
+                    <span class="status-badge status-done">Готово</span>
+                    <p style="margin-top: 8px; color: var(--text-secondary);">
+                        Веб-версия • Исправление загрузок • Drag-and-drop
+                    </p>
+                </div>
+                <div class="roadmap-item planned">
+                    <span class="version">v5.3+</span>
+                    <span class="status-badge status-planned">В планах</span>
+                    <p style="margin-top: 8px; color: var(--text-secondary);">
+                        Множественная загрузка • Аудит действий • 2FA • Шифрование файлов
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Слайд 9: Масштабирование -->
+    <div class="slide" id="slide-9">
+        <div class="slide-content" style="text-align: center;">
+            <div class="slide-title" style="margin-left: auto; margin-right: auto;">🚀 Масштабирование</div>
+            <div class="ecosystem-flow">
+                <div class="box">📁 АДИДАС (файлы)</div><br>
+                <span class="arrow">↓</span><br>
+                <div class="box">💬 Корпоративный мессенджер</div><br>
+                <span class="arrow">↓</span><br>
+                <div class="box">📋 Управление задачами</div><br>
+                <span class="arrow">↓</span><br>
+                <div class="box">🎥 Видеоконференции</div><br>
+                <span class="arrow">↓</span><br>
+                <div style="font-size: 32px; font-weight: 900; color: var(--red); margin-top: 20px;">
+                    = Единая экосистема для бизнеса
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Слайд 10: Преимущества -->
+    <div class="slide" id="slide-10">
+        <div class="slide-content">
+            <div class="slide-title">💪 Преимущества</div>
+            <div class="advantage-grid">
+                <div class="advantage-card">
+                    <span class="emoji">🔒</span>
+                    <div class="title">Безопасность</div>
+                    <div class="desc">Всё на своём сервере, никаких облаков</div>
+                </div>
+                <div class="advantage-card">
+                    <span class="emoji">💰</span>
+                    <div class="title">Экономия</div>
+                    <div class="desc">Не платим за облачные сервисы</div>
+                </div>
+                <div class="advantage-card">
+                    <span class="emoji">📱</span>
+                    <div class="title">Удобство</div>
+                    <div class="desc">Телефон всегда под рукой</div>
+                </div>
+                <div class="advantage-card">
+                    <span class="emoji">⚡</span>
+                    <div class="title">Скорость</div>
+                    <div class="desc">Ищем файл за секунду, а не за час</div>
+                </div>
+                <div class="advantage-card">
+                    <span class="emoji">🎯</span>
+                    <div class="title">Контроль</div>
+                    <div class="desc">Администратор видит всё</div>
+                </div>
+                <div class="advantage-card">
+                    <span class="emoji">🔄</span>
+                    <div class="title">Синхронизация</div>
+                    <div class="desc">Веб и телефон — единая база</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Слайд 12: Масштабирование сервера (НОВЫЙ) -->
+    <div class="slide" id="slide-12">
+        <div class="slide-content" style="text-align: center; max-width: 1000px;">
+            <div class="slide-title" style="margin-left: auto; margin-right: auto;">🖥️ Масштабирование сервера</div>
+            <p style="font-size: 20px; color: var(--text-secondary); margin-bottom: 30px;">
+                Единая инфраструктура для бизнеса: от файлов до управления предприятием
+            </p>
+            
+            <div style="position: relative; margin: 0 auto;">
+                <!-- SVG карта интеграции -->
+                <svg viewBox="0 0 900 600" style="width: 100%; max-width: 900px; height: auto;">
+                    <!-- Фон -->
+                    <rect x="0" y="0" width="900" height="600" rx="15" fill="#1a1a1a" stroke="#333" stroke-width="2"/>
+                    
+                    <!-- Центральный сервер -->
+                    <rect x="325" y="230" width="250" height="140" rx="12" fill="#EF3340" opacity="0.9"/>
+                    <text x="450" y="280" text-anchor="middle" fill="white" font-size="20" font-weight="bold">🖥️ СЕРВЕР</text>
+                    <text x="450" y="310" text-anchor="middle" fill="white" font-size="14">gazonbaza.ru</text>
+                    <text x="450" y="335" text-anchor="middle" fill="white" font-size="12">VPS BeGet</text>
+                    <text x="450" y="355" text-anchor="middle" fill="white" font-size="12">Nginx + Apache + MariaDB</text>
+
+                    <!-- Линии соединений -->
+                    <!-- База данных -->
+                    <line x1="350" y1="370" x2="180" y2="480" stroke="#4CAF50" stroke-width="3" stroke-dasharray="6,3"/>
+                    <!-- Файлообменник -->
+                    <line x1="400" y1="370" x2="450" y2="500" stroke="#EF3340" stroke-width="3" stroke-dasharray="6,3"/>
+                    <!-- 1С -->
+                    <line x1="550" y1="370" x2="720" y2="480" stroke="#FF9800" stroke-width="3" stroke-dasharray="6,3"/>
+                    <!-- Сайты -->
+                    <line x1="325" y1="260" x2="50" y2="150" stroke="#2196F3" stroke-width="3" stroke-dasharray="6,3"/>
+                    <!-- Мессенджер -->
+                    <line x1="450" y1="230" x2="450" y2="80" stroke="#00BCD4" stroke-width="3" stroke-dasharray="6,3"/>
+                    <!-- CRM -->
+                    <line x1="575" y1="260" x2="850" y2="150" stroke="#9C27B0" stroke-width="3" stroke-dasharray="6,3"/>
+                    <!-- Управление -->
+                    <line x1="575" y1="300" x2="820" y2="330" stroke="#E91E63" stroke-width="3" stroke-dasharray="6,3"/>
+                    <!-- ЭДО -->
+                    <line x1="550" y1="300" x2="750" y2="420" stroke="#607D8B" stroke-width="3" stroke-dasharray="6,3"/>
+
+                    <!-- Узлы -->
+                    <!-- База данных -->
+                    <rect x="80" y="480" width="200" height="50" rx="10" fill="#1B5E20" stroke="#4CAF50" stroke-width="2"/>
+                    <text x="180" y="505" text-anchor="middle" fill="white" font-size="13" font-weight="bold">🗄️ MariaDB</text>
+                    <text x="180" y="520" text-anchor="middle" fill="#81C784" font-size="10">Пользователи, файлы, логи</text>
+
+                    <!-- Файлообменник -->
+                    <rect x="340" y="500" width="220" height="50" rx="10" fill="#B71C1C" stroke="#EF3340" stroke-width="2"/>
+                    <text x="450" y="525" text-anchor="middle" fill="white" font-size="13" font-weight="bold">📁 Файлообменник</text>
+                    <text x="450" y="540" text-anchor="middle" fill="#EF9A9A" font-size="10">Android + Web</text>
+
+                    <!-- 1С -->
+                    <rect x="630" y="480" width="180" height="50" rx="10" fill="#E65100" stroke="#FF9800" stroke-width="2"/>
+                    <text x="720" y="505" text-anchor="middle" fill="white" font-size="13" font-weight="bold">📊 1С:Предприятие</text>
+                    <text x="720" y="520" text-anchor="middle" fill="#FFB74D" font-size="10">Бухгалтерия, склад</text>
+
+                    <!-- 5 сайтов -->
+                    <rect x="30" y="120" width="120" height="30" rx="6" fill="#0D47A1" stroke="#2196F3" stroke-width="1.5"/>
+                    <text x="70" y="147" text-anchor="middle" fill="white" font-size="12">🌐 Сайт-1</text>
+                    <rect x="30" y="155" width="120" height="30" rx="6" fill="#0D47A1" stroke="#2196F3" stroke-width="1.5"/>
+                    <text x="70" y="182" text-anchor="middle" fill="white" font-size="12">🌐 Сайт-2</text>
+                    <rect x="30" y="190" width="120" height="30" rx="6" fill="#0D47A1" stroke="#2196F3" stroke-width="1.5"/>
+                    <text x="70" y="217" text-anchor="middle" fill="white" font-size="12">🌐 Сайт-3</text>
+                    <rect x="30" y="225" width="120" height="30" rx="6" fill="#0D47A1" stroke="#2196F3" stroke-width="1.5"/>
+                    <text x="70" y="252" text-anchor="middle" fill="white" font-size="12">🌐 Сайт-4</text>
+                    <rect x="30" y="260" width="120" height="30" rx="6" fill="#0D47A1" stroke="#2196F3" stroke-width="1.5"/>
+                    <text x="70" y="287" text-anchor="middle" fill="white" font-size="12">🌐 Сайт-5</text>
+                    <rect x="30" y="100" width="120" height="20" rx="6" fill="#1565C0" stroke="#2196F3" stroke-width="2"/>
+                    <text x="90" y="114" text-anchor="middle" fill="white" font-size="11" font-weight="bold">🛒 5 МАГАЗИНОВ</text>
+
+                    <!-- Мессенджер -->
+                    <rect x="370" y="40" width="160" height="40" rx="10" fill="#006064" stroke="#00BCD4" stroke-width="2"/>
+                    <text x="450" y="65" text-anchor="middle" fill="white" font-size="13" font-weight="bold">💬 Мессенджер</text>
+                    <text x="450" y="73" text-anchor="middle" fill="#80DEEA" font-size="9">Корпоративный чат</text>
+
+                    <!-- CRM -->
+                    <rect x="740" y="120" width="140" height="40" rx="10" fill="#4A148C" stroke="#9C27B0" stroke-width="2"/>
+                    <text x="810" y="145" text-anchor="middle" fill="white" font-size="13" font-weight="bold">👥 CRM</text>
+                    <text x="810" y="153" text-anchor="middle" fill="#CE93D8" font-size="9">Клиенты, сделки</text>
+
+                    <!-- Управление -->
+                    <rect x="730" y="300" width="150" height="40" rx="10" fill="#880E4F" stroke="#E91E63" stroke-width="2"/>
+                    <text x="805" y="325" text-anchor="middle" fill="white" font-size="13" font-weight="bold">🏭 Управление</text>
+                    <text x="805" y="333" text-anchor="middle" fill="#F48FB1" font-size="9">Планирование, задачи</text>
+
+                    <!-- ЭДО -->
+                    <rect x="660" y="410" width="160" height="40" rx="10" fill="#37474F" stroke="#607D8B" stroke-width="2"/>
+                    <text x="740" y="435" text-anchor="middle" fill="white" font-size="13" font-weight="bold">📄 ЭДО</text>
+                    <text x="740" y="443" text-anchor="middle" fill="#90A4AE" font-size="9">Налоговая, клиенты</text>
+
+                    <!-- Легенда этапов -->
+                    <rect x="10" y="570" width="12" height="12" rx="2" fill="#4CAF50"/>
+                    <text x="28" y="580" fill="#81C784" font-size="10">Готово</text>
+                    <rect x="100" y="570" width="12" height="12" rx="2" fill="#FF9800"/>
+                    <text x="118" y="580" fill="#FFB74D" font-size="10">В процессе</text>
+                    <rect x="220" y="570" width="12" height="12" rx="2" fill="#9C27B0"/>
+                    <text x="238" y="580" fill="#CE93D8" font-size="10">План 2026-2027</text>
+                </svg>
+            </div>
+            
+            <div style="margin-top: 15px; font-size: 13px; color: var(--text-secondary);">
+                Единая экосистема: сервер → база данных → файлы → магазины → клиенты → государство
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- Слайд 11: Заключение -->
+    <div class="slide" id="slide-11" style="text-align: center;">
+        <div style="font-size: 60px; margin-bottom: 20px;">🏆</div>
+        <div class="main-title" style="font-size: 48px; margin-bottom: 20px;">АДИДАС</div>
+        <div class="subtitle" style="font-size: 24px;">Готовый инструмент для бизнеса</div>
+        <div class="quote">
+            «Порядок в файлах — порядок в делах»
+        </div>
+        <div style="font-size: 20px; color: var(--text-secondary); margin-top: 40px;">
+            Готов к презентации и внедрению!
+        </div>
+        <div style="margin-top: 30px; color: var(--text-secondary); font-size: 14px;">
+            Контакты: [администратор системы]
+        </div>
+    </div>
+
+</div>
+
+<!-- Навигация -->
+<div class="slide-counter" id="counter">1 / 11</div>
+<div class="nav" id="nav">
+    <button class="nav-btn" onclick="prevSlide()" title="Назад">◀</button>
+    <span id="dots"></span>
+    <button class="nav-btn" onclick="nextSlide()" title="Вперёд">▶</button>
+</div>
+
+<script>
+    let currentSlide = 0;
+    const slides = document.querySelectorAll('.slide');
+    const totalSlides = slides.length;
+    const counter = document.getElementById('counter');
+    const dotsContainer = document.getElementById('dots');
+
+    // Создаём точки навигации
+    for (let i = 0; i < totalSlides; i++) {
+        const dot = document.createElement('span');
+        dot.className = 'nav-dot';
+        dot.onclick = () => goToSlide(i);
+        dotsContainer.appendChild(dot);
+    }
+
+    function updateSlide() {
+        slides.forEach((slide, index) => {
+            slide.className = 'slide';
+            if (index === currentSlide) {
+                slide.classList.add('active');
+            } else if (index < currentSlide) {
+                slide.classList.add('prev');
+            }
+        });
+        
+        // Обновляем точки
+        const dots = document.querySelectorAll('.nav-dot');
+        dots.forEach((dot, index) => {
+            dot.className = 'nav-dot';
+            if (index === currentSlide) {
+                dot.classList.add('active');
+            }
+        });
+        
+        counter.textContent = `${currentSlide + 1} / ${totalSlides}`;
+    }
+
+    function nextSlide() {
+        if (currentSlide < totalSlides - 1) {
+            currentSlide++;
+            updateSlide();
+        }
+    }
+
+    function prevSlide() {
+        if (currentSlide > 0) {
+            currentSlide--;
+            updateSlide();
+        }
+    }
+
+    function goToSlide(index) {
+        currentSlide = index;
+        updateSlide();
+    }
+
+    // Навигация клавишами
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === ' ') {
+            e.preventDefault();
+            nextSlide();
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            prevSlide();
+        } else if (e.key === 'Home') {
+            e.preventDefault();
+            goToSlide(0);
+        } else if (e.key === 'End') {
+            e.preventDefault();
+            goToSlide(totalSlides - 1);
+        }
+    });
+
+    // Свайпы для мобильных
+    let touchStartX = 0;
+    document.addEventListener('touchstart', (e) => {
+        touchStartX = e.changedTouches[0].screenX;
+    });
+    document.addEventListener('touchend', (e) => {
+        const touchEndX = e.changedTouches[0].screenX;
+        if (touchEndX < touchStartX - 50) nextSlide();
+        if (touchEndX > touchStartX + 50) prevSlide();
+    });
+
+    updateSlide();
+</script>
+
+</body>
+</html>
